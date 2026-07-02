@@ -7,6 +7,7 @@ import Badge from "../components/ui/badge/Badge";
 import { Modal } from "../components/ui/modal";
 import Label from "../components/form/Label";
 import Input from "../components/form/input/InputField";
+import { filterByTenant } from "../lib/tenant-filter";
 import { useAuth } from "../context/AuthContext";
 import {
   getMedicos,
@@ -65,7 +66,8 @@ export default function Medicos() {
   const [pageSize, setPageSize] = useState(10);
 
   const isRoot = user?.role === "root";
-  const canWriteMedico = isRoot || user?.role === "admin_clinica";
+  const canWriteMedico =
+    isRoot || user?.role === "admin_clinica" || user?.role === "admin_sucursal";
   const paginatedMedicos = medicos.slice((page - 1) * pageSize, page * pageSize);
 
   const load = async () => {
@@ -73,7 +75,7 @@ export default function Medicos() {
     setError("");
     try {
       const data = await getMedicos();
-      setMedicos(data.medicos);
+      setMedicos(filterByTenant(data.medicos, user?.tenantId, isRoot));
       setPage(1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar");

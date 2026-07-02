@@ -3,6 +3,7 @@ import PageMeta from "../components/common/PageMeta";
 import Button from "../components/ui/button/Button";
 import Badge from "../components/ui/badge/Badge";
 import { useAuth } from "../context/AuthContext";
+import { filterByTenant } from "../lib/tenant-filter";
 import { useTurnosSocket } from "../hooks/useTurnosSocket";
 import { getTurnos, updateTurnoEstado, type Turno } from "../lib/api";
 
@@ -43,19 +44,20 @@ export default function Blank() {
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
   const [callingId, setCallingId] = useState<string | null>(null);
   const canLlamar = user?.role !== "medico";
+  const isRoot = user?.role === "root";
 
   const load = useCallback(async () => {
     setError("");
     try {
       const { turnos: data } = await getTurnos({ fecha });
-      setTurnos(data);
+      setTurnos(filterByTenant(data, user?.tenantId, isRoot));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar turnos");
       setTurnos([]);
     } finally {
       setLoading(false);
     }
-  }, [fecha]);
+  }, [fecha, user?.tenantId, isRoot]);
 
   useEffect(() => {
     setLoading(true);

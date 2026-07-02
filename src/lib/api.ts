@@ -22,6 +22,7 @@ export interface LoginResponse {
     role: string;
     tenantId: string | null;
     fullName: string | null;
+    sucursalIds?: string[];
   };
   requiresPasswordChange?: boolean;
 }
@@ -138,6 +139,7 @@ export interface TenantUser {
   full_name: string | null;
   role: string;
   created_at: string;
+  sucursales?: { id: string; nombre: string }[];
 }
 
 export async function getTenantUsers(tenantId: string): Promise<{ users: TenantUser[] }> {
@@ -156,7 +158,13 @@ export type CreateTenantUserResult = TenantUser & {
 
 export async function createTenantUser(
   tenantId: string,
-  body: { email: string; password: string; full_name?: string; role: "admin_clinica" | "recepcion" | "medico" }
+  body: {
+    email: string;
+    password: string;
+    full_name?: string;
+    role: "admin_clinica" | "admin_sucursal" | "recepcion" | "medico";
+    sucursal_ids?: string[];
+  }
 ): Promise<CreateTenantUserResult> {
   const res = await fetchWithAuth(`/api/tenants/${tenantId}/users`, {
     method: "POST",

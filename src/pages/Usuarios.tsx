@@ -12,8 +12,10 @@ import {
   getTenants,
   getTenantUsers,
   createTenantUser,
+  getSucursales,
   type Tenant,
   type TenantUser,
+  type Sucursal,
 } from "../lib/api";
 import {
   Table,
@@ -26,17 +28,21 @@ import { Pagination } from "../components/ui/pagination";
 
 const ROL_LABEL: Record<string, string> = {
   admin_clinica: "Administrador",
+  admin_sucursal: "Admin. Sucursal",
   recepcion: "Recepcionista",
   medico: "Médico",
 };
 
-const ROL_BADGE_COLOR: Record<string, "primary" | "success" | "info"> = {
+const ROL_BADGE_COLOR: Record<string, "primary" | "success" | "info" | "warning"> = {
   admin_clinica: "primary",
+  admin_sucursal: "warning",
   recepcion: "info",
   medico: "success",
 };
 
-type RoleOption = "admin_clinica" | "recepcion" | "medico";
+type RoleOption = "admin_clinica" | "admin_sucursal" | "recepcion" | "medico";
+
+const ROLES_REQUIRING_SUCURSAL: RoleOption[] = ["admin_sucursal", "recepcion"];
 
 export default function Usuarios() {
   const { user } = useAuth();
@@ -52,13 +58,18 @@ export default function Usuarios() {
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<RoleOption>("recepcion");
+  const [sucursales, setSucursales] = useState<Sucursal[]>([]);
+  const [selectedSucursalIds, setSelectedSucursalIds] = useState<string[]>([]);
+  const [loadingSucursales, setLoadingSucursales] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const isAdmin = user?.role === "admin_clinica";
   const isRoot = user?.role === "root";
+  const isAdminClinica = user?.role === "admin_clinica";
+  const isAdminSucursal = user?.role === "admin_sucursal";
+  const canManageUsers = isRoot || isAdminClinica || isAdminSucursal;
   const tenantId = isRoot ? selectedTenantId : (user?.tenantId ?? null);
   const selectedTenant = tenants.find((t) => t.id === selectedTenantId);
 
@@ -102,11 +113,28 @@ export default function Usuarios() {
     if (isRoot) loadTenants();
   }, [isRoot, loadTenants]);
 
+  const loadSucursales = useCallback(async () => {
+    setLoadingSucursales(true);
+    try {
+      const data = await getSucursales();
+      setSucursales(data.sucursales.filter((s) => s.activo));
+    } catch {
+      setSucursales([]);
+    } finally {
+      setLoadingSucursales(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (isAdmin && user?.tenantId) {
+    if (canManageUsers && tenantId) loadSucursales();
+    else setSucursales([]);
+  }, [canManageUsers, tenantId, loadSucursales]);
+
+  useEffect(() => {
+    if (isAdminClinica && user?.tenantId) {
       setSelectedTenantId(user.tenantId);
     }
-  }, [isAdmin, user?.tenantId]);
+  }, [isAdminClinica, user?.tenantId]);
 
   useEffect(() => {
     if (tenantId) loadUsers();
@@ -119,9 +147,20 @@ export default function Usuarios() {
     setEmail("");
     setFullName("");
     setPassword("");
-    setRole(isRoot ? "admin_clinica" : "recepcion");
+    setRole(isRoot ? "admin_clinica" : isAdminSucursal ? "recepcion" : "recepcion");
+    setSelectedSucursalIds([]);
     setModalOpen(true);
   };
+
+  const toggleSucursal = (sucursalId: string) => {
+    setSelectedSucursalIds((prev) =>
+      prev.includes(sucursalId)
+        ? prev.filter((id) => id !== sucursalId)
+        : [...prev, sucursalId]
+    );
+  };
+
+  const requiresSucursal = ROLES_REQUIRING_SUCURSAL.includes(role);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,6 +175,10 @@ export default function Usuarios() {
       setCreateError("La contraseña debe tener al menos 6 caracteres");
       return;
     }
+    if (requiresSucursal && selectedSucursalIds.length === 0) {
+      setCreateError("Selecciona al menos una sucursal");
+      return;
+    }
     setCreating(true);
     try {
       const result = await createTenantUser(tenantId, {
@@ -143,6 +186,7 @@ export default function Usuarios() {
         password,
         full_name: fullName.trim() || undefined,
         role,
+        sucursal_ids: requiresSucursal ? selectedSucursalIds : undefined,
       });
       setModalOpen(false);
       setEmail("");
@@ -164,14 +208,14 @@ export default function Usuarios() {
     }
   };
 
-  if (!isRoot && !isAdmin) {
+  if (!canManageUsers) {
     return (
       <>
         <PageMeta title="Usuarios | Colas Turnos" description="Gestión de usuarios" />
         <PageBreadcrumb pageTitle="Usuarios" />
         <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
           <p className="text-gray-600 dark:text-gray-400">
-            Solo el administrador de la clínica puede gestionar usuarios (recepcionistas y médicos).
+            Solo administradores pueden gestionar usuarios de la clínica o sucursal.
           </p>
         </div>
       </>
@@ -181,14 +225,21 @@ export default function Usuarios() {
   const canCreate = isRoot ? !!selectedTenantId : !!tenantId;
   const roleOptions: { value: RoleOption; label: string }[] = isRoot
     ? [
-        { value: "admin_clinica", label: "Administrador" },
+        { value: "admin_clinica", label: "Administrador (clínica)" },
+        { value: "admin_sucursal", label: "Administrador (sucursal)" },
         { value: "recepcion", label: "Recepcionista" },
         { value: "medico", label: "Médico" },
       ]
-    : [
-        { value: "recepcion", label: "Recepcionista" },
-        { value: "medico", label: "Médico" },
-      ];
+    : isAdminClinica
+      ? [
+          { value: "admin_sucursal", label: "Administrador (sucursal)" },
+          { value: "recepcion", label: "Recepcionista" },
+          { value: "medico", label: "Médico" },
+        ]
+      : [
+          { value: "recepcion", label: "Recepcionista" },
+          { value: "medico", label: "Médico" },
+        ];
 
   return (
     <>
@@ -243,9 +294,14 @@ export default function Usuarios() {
                 Usuarios de {selectedTenant.name}
               </h2>
             )}
-            {isAdmin && (
+            {isAdminClinica && (
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Crea recepcionistas o médicos. Las credenciales se envían por correo al crear cada usuario.
+                Crea administradores de sucursal, recepcionistas o médicos. Las credenciales se envían por correo.
+              </p>
+            )}
+            {isAdminSucursal && (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Crea recepcionistas o médicos para tus sucursales asignadas.
               </p>
             )}
           </div>
@@ -289,6 +345,7 @@ export default function Usuarios() {
                     <TableCell isHeader>Correo</TableCell>
                     <TableCell isHeader>Nombre</TableCell>
                     <TableCell isHeader>Rol</TableCell>
+                    <TableCell isHeader>Sucursales</TableCell>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -306,6 +363,11 @@ export default function Usuarios() {
                         >
                           {ROL_LABEL[u.role] ?? u.role}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-gray-600 dark:text-gray-400 text-sm">
+                        {u.sucursales && u.sucursales.length > 0
+                          ? u.sucursales.map((s) => s.nombre).join(", ")
+                          : "—"}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -358,6 +420,31 @@ export default function Usuarios() {
                 ))}
               </select>
             </div>
+            {requiresSucursal && (
+              <div>
+                <Label>Sucursales asignadas</Label>
+                {loadingSucursales ? (
+                  <p className="text-sm text-gray-500">Cargando sucursales…</p>
+                ) : sucursales.length === 0 ? (
+                  <p className="text-sm text-amber-600">No hay sucursales disponibles.</p>
+                ) : (
+                  <div className="mt-2 max-h-40 space-y-2 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                    {sucursales.map((s) => (
+                      <label key={s.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={selectedSucursalIds.includes(s.id)}
+                          onChange={() => toggleSucursal(s.id)}
+                          disabled={creating}
+                          className="rounded border-gray-300"
+                        />
+                        <span>{s.nombre}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <Label>Correo</Label>
               <Input

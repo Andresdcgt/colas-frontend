@@ -113,6 +113,39 @@ const adminClinicaMenuSections: NavSection[] = [
   },
 ];
 
+const adminSucursalMenuSections: NavSection[] = [
+  {
+    title: "General",
+    items: [{ icon: <GridIcon />, name: "Dashboard", path: "/" }],
+  },
+  {
+    title: "Mi sucursal",
+    items: [
+      { icon: <UserCircleIcon />, name: "Usuarios", path: "/usuarios" },
+      { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
+      { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
+    ],
+  },
+  {
+    title: "Turnos",
+    items: [
+      { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
+      { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
+      { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
+      { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
+      { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
+    ],
+  },
+  {
+    title: "Reportes",
+    items: [metricasItem],
+  },
+  {
+    title: "Cuenta",
+    items: [perfilItem],
+  },
+];
+
 const recepcionMenuSections: NavSection[] = [
   {
     title: "General",
@@ -175,6 +208,8 @@ function getMenuSections(role: string | undefined): NavSection[] {
       return rootMenuSections;
     case "admin_clinica":
       return adminClinicaMenuSections;
+    case "admin_sucursal":
+      return adminSucursalMenuSections;
     case "recepcion":
       return recepcionMenuSections;
     case "medico":

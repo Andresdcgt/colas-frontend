@@ -17,6 +17,7 @@ import {
   type ConsultorioColaResumen,
 } from "../lib/api";
 import { Modal } from "../components/ui/modal";
+import { filterByTenant } from "../lib/tenant-filter";
 import { useAuth } from "../context/AuthContext";
 
 function groupByConsultorio(turnos: Turno[]): Map<string, { nombre: string; turnos: Turno[] }> {
@@ -42,6 +43,7 @@ function siguienteEnCola(turnos: Turno[]): Turno | null {
 
 export default function VistaMedico() {
   const { user } = useAuth();
+  const isRoot = user?.role === "root";
 
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,14 +113,14 @@ export default function VistaMedico() {
     setError("");
     try {
       const { turnos: data } = await getTurnos({ fecha });
-      setTurnos(data);
+      setTurnos(filterByTenant(data, user?.tenantId, isRoot));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar turnos");
       setTurnos([]);
     } finally {
       setLoading(false);
     }
-  }, [fecha]);
+  }, [fecha, user?.tenantId, isRoot]);
 
   useEffect(() => {
     setLoading(true);

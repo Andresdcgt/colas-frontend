@@ -6,6 +6,7 @@ import Button from "../components/ui/button/Button";
 import Badge from "../components/ui/badge/Badge";
 import { Modal } from "../components/ui/modal";
 import Label from "../components/form/Label";
+import { filterByTenant } from "../lib/tenant-filter";
 import { useAuth } from "../context/AuthContext";
 import {
   getConsultorios,
@@ -48,7 +49,8 @@ export default function Consultorios() {
   const [pageSize, setPageSize] = useState(10);
 
   const isRoot = user?.role === "root";
-  const canCreateConsultorio = isRoot || user?.role === "admin_clinica";
+  const canCreateConsultorio =
+    isRoot || user?.role === "admin_clinica" || user?.role === "admin_sucursal";
   const paginatedConsultorios = consultorios.slice((page - 1) * pageSize, page * pageSize);
 
   const load = async () => {
@@ -56,7 +58,7 @@ export default function Consultorios() {
     setError("");
     try {
       const data = await getConsultorios();
-      setConsultorios(data.consultorios);
+      setConsultorios(filterByTenant(data.consultorios, user?.tenantId, isRoot));
       setPage(1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar");
@@ -73,8 +75,12 @@ export default function Consultorios() {
     if (modalOpen) {
       Promise.all([getSucursales(), getMedicos()])
         .then(([s, m]) => {
-          setSucursales(s.sucursales.filter((x) => x.activo));
-          setMedicos(m.medicos.filter((x) => x.activo));
+          setSucursales(
+            filterByTenant(s.sucursales, user?.tenantId, isRoot).filter((x) => x.activo)
+          );
+          setMedicos(
+            filterByTenant(m.medicos, user?.tenantId, isRoot).filter((x) => x.activo)
+          );
         })
         .catch(() => {});
       if (isRoot) {

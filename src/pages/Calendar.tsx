@@ -7,6 +7,8 @@ import type { DatesSetArg, EventClickArg } from "@fullcalendar/core";
 import { Modal } from "../components/ui/modal";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import PageMeta from "../components/common/PageMeta";
+import { useAuth } from "../context/AuthContext";
+import { filterByTenant } from "../lib/tenant-filter";
 import { getTurnos, type Turno } from "../lib/api";
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -31,6 +33,8 @@ function turnoToEvent(t: Turno): { id: string; title: string; start: string; ext
 }
 
 const Calendar: React.FC = () => {
+  const { user } = useAuth();
+  const isRoot = user?.role === "root";
   const [events, setEvents] = useState<{ id: string; title: string; start: string; extendedProps: Turno }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -44,14 +48,14 @@ const Calendar: React.FC = () => {
     const fecha_hasta = end.toISOString().slice(0, 10);
     try {
       const { turnos } = await getTurnos({ fecha_desde, fecha_hasta });
-      setEvents(turnos.map(turnoToEvent));
+      setEvents(filterByTenant(turnos, user?.tenantId, isRoot).map(turnoToEvent));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar turnos");
       setEvents([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.tenantId, isRoot]);
 
   const handleDatesSet = useCallback(
     (arg: DatesSetArg) => {

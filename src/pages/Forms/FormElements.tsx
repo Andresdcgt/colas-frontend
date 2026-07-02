@@ -6,6 +6,7 @@ import Label from "../../components/form/Label";
 import Input from "../../components/form/input/InputField";
 import Button from "../../components/ui/button/Button";
 import { useAuth } from "../../context/AuthContext";
+import { filterByTenant } from "../../lib/tenant-filter";
 import {
   getConsultorios,
   getPacientes,
@@ -37,15 +38,19 @@ export default function FormElements() {
   const [enviando, setEnviando] = useState<"email" | "sms" | null>(null);
   const [enviadoMsg, setEnviadoMsg] = useState<{ texto: string; ok: boolean } | null>(null);
 
+  const isRoot = user?.role === "root";
+
   useEffect(() => {
     Promise.all([getConsultorios(), getPacientes()])
       .then(([c, p]) => {
-        setConsultorios(c.consultorios.filter((x) => x.activo));
-        setPacientes(p.pacientes);
+        setConsultorios(
+          filterByTenant(c.consultorios, user?.tenantId, isRoot).filter((x) => x.activo)
+        );
+        setPacientes(filterByTenant(p.pacientes, user?.tenantId, isRoot));
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Error al cargar"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [user?.tenantId, isRoot]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

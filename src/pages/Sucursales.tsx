@@ -8,6 +8,7 @@ import { Modal } from "../components/ui/modal";
 import Label from "../components/form/Label";
 import Input from "../components/form/input/InputField";
 import { useAuth } from "../context/AuthContext";
+import { filterByTenant } from "../lib/tenant-filter";
 import {
   getSucursales,
   createSucursal,
@@ -131,8 +132,7 @@ export default function Sucursales() {
 
   const mySucursales = useMemo(() => {
     if (isRoot) return [];
-    const tid = user?.tenantId;
-    return tid ? sucursales.filter((s) => s.tenant_id === tid) : [];
+    return filterByTenant(sucursales, user?.tenantId, isRoot);
   }, [isRoot, user?.tenantId, sucursales]);
 
   return (

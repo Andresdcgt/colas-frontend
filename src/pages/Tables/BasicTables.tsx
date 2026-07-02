@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import { Pagination } from "../../components/ui/pagination";
+import { filterByTenant } from "../../lib/tenant-filter";
 import { useAuth } from "../../context/AuthContext";
 import {
   getPacientes,
@@ -45,7 +46,11 @@ export default function BasicTables() {
   const [pageSize, setPageSize] = useState(10);
 
   const isRoot = user?.role === "root";
-  const canCreatePaciente = isRoot || user?.role === "admin_clinica" || user?.role === "recepcion";
+  const canCreatePaciente =
+    isRoot ||
+    user?.role === "admin_clinica" ||
+    user?.role === "admin_sucursal" ||
+    user?.role === "recepcion";
   const paginatedPacientes = pacientes.slice((page - 1) * pageSize, page * pageSize);
 
   const loadPacientes = async () => {
@@ -53,7 +58,7 @@ export default function BasicTables() {
     setError("");
     try {
       const data = await getPacientes(search ? { search } : undefined);
-      setPacientes(data.pacientes);
+      setPacientes(filterByTenant(data.pacientes, user?.tenantId, isRoot));
       setPage(1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar");
