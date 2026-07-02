@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 
-// Assume these icons are imported from an icon library
 import {
   BoxCubeIcon,
   CalenderIcon,
@@ -12,13 +11,11 @@ import {
   ListIcon,
   PageIcon,
   PieChartIcon,
-  PlugInIcon,
   TableIcon,
   UserCircleIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "../context/AuthContext";
-import SidebarWidget from "./SidebarWidget";
 
 type NavItem = {
   name: string;
@@ -27,130 +24,188 @@ type NavItem = {
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
-// Menú para rol Root (súper admin)
-const rootMenuItems: NavItem[] = [
-  { icon: <GridIcon />, name: "Dashboard", path: "/" },
-  { icon: <GroupIcon />, name: "Clínicas y Hospitales", path: "/clinicas" },
-  { icon: <UserCircleIcon />, name: "Usuarios", path: "/usuarios" },
-  { icon: <BoxCubeIcon />, name: "Sucursales", path: "/sucursales" },
-  { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
-  { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
-  { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
-  { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
-  { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
-  { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
+type NavSection = {
+  title: string;
+  items: NavItem[];
+};
+
+const metricasItem: NavItem = {
+  icon: <PieChartIcon />,
+  name: "Métricas",
+  subItems: [
+    { name: "Turnos por día", path: "/line-chart", pro: false },
+    { name: "Ocupación", path: "/bar-chart", pro: false },
+  ],
+};
+
+const perfilItem: NavItem = {
+  icon: <UserCircleIcon />,
+  name: "Perfil",
+  path: "/profile",
+};
+
+const rootMenuSections: NavSection[] = [
   {
-    icon: <PieChartIcon />,
-    name: "Métricas",
-    subItems: [
-      { name: "Turnos por día", path: "/line-chart", pro: false },
-      { name: "Ocupación", path: "/bar-chart", pro: false },
+    title: "General",
+    items: [{ icon: <GridIcon />, name: "Dashboard", path: "/" }],
+  },
+  {
+    title: "Administración",
+    items: [
+      { icon: <GroupIcon />, name: "Clínicas y Hospitales", path: "/clinicas" },
+      { icon: <UserCircleIcon />, name: "Usuarios", path: "/usuarios" },
+      { icon: <BoxCubeIcon />, name: "Sucursales", path: "/sucursales" },
+      { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
+      { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
     ],
   },
-  { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
-  { icon: <UserCircleIcon />, name: "Perfil", path: "/profile" },
+  {
+    title: "Turnos",
+    items: [
+      { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
+      { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
+      { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
+      { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
+      { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
+    ],
+  },
+  {
+    title: "Reportes",
+    items: [metricasItem],
+  },
+  {
+    title: "Cuenta",
+    items: [perfilItem],
+  },
 ];
 
-// Menú para admin_clinica (gestión completa de la clínica)
-const adminClinicaMenuItems: NavItem[] = [
-  { icon: <GridIcon />, name: "Dashboard", path: "/" },
-  { icon: <UserCircleIcon />, name: "Usuarios", path: "/usuarios" },
-  { icon: <BoxCubeIcon />, name: "Sucursales", path: "/sucursales" },
-  { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
-  { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
-  { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
-  { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
-  { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
-  { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
+const adminClinicaMenuSections: NavSection[] = [
   {
-    icon: <PieChartIcon />,
-    name: "Métricas",
-    subItems: [
-      { name: "Turnos por día", path: "/line-chart", pro: false },
-      { name: "Ocupación", path: "/bar-chart", pro: false },
+    title: "General",
+    items: [{ icon: <GridIcon />, name: "Dashboard", path: "/" }],
+  },
+  {
+    title: "Administración",
+    items: [
+      { icon: <UserCircleIcon />, name: "Usuarios", path: "/usuarios" },
+      { icon: <BoxCubeIcon />, name: "Sucursales", path: "/sucursales" },
+      { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
+      { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
     ],
   },
-  { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
-  { icon: <UserCircleIcon />, name: "Perfil", path: "/profile" },
+  {
+    title: "Turnos",
+    items: [
+      { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
+      { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
+      { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
+      { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
+      { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
+    ],
+  },
+  {
+    title: "Reportes",
+    items: [metricasItem],
+  },
+  {
+    title: "Cuenta",
+    items: [perfilItem],
+  },
 ];
 
-// Menú para recepcionista (turnos, pacientes, pantalla de espera; sin CRUD sucursales/consultorios/médicos ni usuarios)
-const recepcionMenuItems: NavItem[] = [
-  { icon: <GridIcon />, name: "Dashboard", path: "/" },
-  { icon: <BoxCubeIcon />, name: "Sucursales", path: "/sucursales" },
-  { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
-  { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
-  { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
-  { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
-  { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
-  { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
+const recepcionMenuSections: NavSection[] = [
   {
-    icon: <PieChartIcon />,
-    name: "Métricas",
-    subItems: [
-      { name: "Turnos por día", path: "/line-chart", pro: false },
-      { name: "Ocupación", path: "/bar-chart", pro: false },
+    title: "General",
+    items: [{ icon: <GridIcon />, name: "Dashboard", path: "/" }],
+  },
+  {
+    title: "Consulta",
+    items: [
+      { icon: <BoxCubeIcon />, name: "Sucursales", path: "/sucursales" },
+      { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
+      { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
     ],
   },
-  { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
-  { icon: <UserCircleIcon />, name: "Perfil", path: "/profile" },
+  {
+    title: "Turnos",
+    items: [
+      { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
+      { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
+      { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
+      { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
+      { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
+    ],
+  },
+  {
+    title: "Reportes",
+    items: [metricasItem],
+  },
+  {
+    title: "Cuenta",
+    items: [perfilItem],
+  },
 ];
 
-// Menú para médico (Vista médico, agenda; sin nuevo turno ni pantalla de espera ni CRUD maestros)
-const medicoMenuItems: NavItem[] = [
-  { icon: <GridIcon />, name: "Dashboard", path: "/" },
-  { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
-  { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
-  { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
+const medicoMenuSections: NavSection[] = [
   {
-    icon: <PieChartIcon />,
-    name: "Métricas",
-    subItems: [
-      { name: "Turnos por día", path: "/line-chart", pro: false },
-      { name: "Ocupación", path: "/bar-chart", pro: false },
+    title: "General",
+    items: [{ icon: <GridIcon />, name: "Dashboard", path: "/" }],
+  },
+  {
+    title: "Atención",
+    items: [
+      { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
+      { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
+      { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
     ],
   },
-  { icon: <UserCircleIcon />, name: "Perfil", path: "/profile" },
+  {
+    title: "Reportes",
+    items: [metricasItem],
+  },
+  {
+    title: "Cuenta",
+    items: [perfilItem],
+  },
 ];
 
-// Menú secundario (componentes de desarrollo; opcional)
-const othersItems: NavItem[] = [
-  {
-    icon: <BoxCubeIcon />,
-    name: "Componentes",
-    subItems: [
-      { name: "Alerts", path: "/alerts", pro: false },
-      { name: "Badges", path: "/badge", pro: false },
-      { name: "Buttons", path: "/buttons", pro: false },
-    ],
-  },
-];
+function getMenuSections(role: string | undefined): NavSection[] {
+  switch (role) {
+    case "root":
+      return rootMenuSections;
+    case "admin_clinica":
+      return adminClinicaMenuSections;
+    case "recepcion":
+      return recepcionMenuSections;
+    case "medico":
+      return medicoMenuSections;
+    default:
+      return adminClinicaMenuSections.map((section) =>
+        section.title === "Administración"
+          ? {
+              ...section,
+              items: section.items.filter((item) => item.path !== "/usuarios"),
+            }
+          : section
+      );
+  }
+}
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const { user } = useAuth();
   const location = useLocation();
-  const navItems: NavItem[] =
-    user?.role === "root"
-      ? rootMenuItems
-      : user?.role === "admin_clinica"
-        ? adminClinicaMenuItems
-        : user?.role === "recepcion"
-          ? recepcionMenuItems
-          : user?.role === "medico"
-            ? medicoMenuItems
-            : adminClinicaMenuItems.filter((i) => i.path !== "/usuarios");
+  const menuSections = getMenuSections(user?.role);
 
   const [openSubmenu, setOpenSubmenu] = useState<{
-    type: "main" | "others";
-    index: number;
+    sectionIndex: number;
+    itemIndex: number;
   } | null>(null);
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>(
     {}
   );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // const isActive = (path: string) => location.pathname === path;
   const isActive = useCallback(
     (path: string) => location.pathname === path,
     [location.pathname]
@@ -158,16 +213,13 @@ const AppSidebar: React.FC = () => {
 
   useEffect(() => {
     let submenuMatched = false;
-    ["main", "others"].forEach((menuType) => {
-      const items = menuType === "main" ? navItems : othersItems;
-      items.forEach((nav, index) => {
+
+    menuSections.forEach((section, sectionIndex) => {
+      section.items.forEach((nav, itemIndex) => {
         if (nav.subItems) {
           nav.subItems.forEach((subItem) => {
             if (isActive(subItem.path)) {
-              setOpenSubmenu({
-                type: menuType as "main" | "others",
-                index,
-              });
+              setOpenSubmenu({ sectionIndex, itemIndex });
               submenuMatched = true;
             }
           });
@@ -178,11 +230,11 @@ const AppSidebar: React.FC = () => {
     if (!submenuMatched) {
       setOpenSubmenu(null);
     }
-  }, [location, isActive]);
+  }, [location, isActive, menuSections]);
 
   useEffect(() => {
     if (openSubmenu !== null) {
-      const key = `${openSubmenu.type}-${openSubmenu.index}`;
+      const key = `${openSubmenu.sectionIndex}-${openSubmenu.itemIndex}`;
       if (subMenuRefs.current[key]) {
         setSubMenuHeight((prevHeights) => ({
           ...prevHeights,
@@ -192,28 +244,29 @@ const AppSidebar: React.FC = () => {
     }
   }, [openSubmenu]);
 
-  const handleSubmenuToggle = (index: number, menuType: "main" | "others") => {
+  const handleSubmenuToggle = (sectionIndex: number, itemIndex: number) => {
     setOpenSubmenu((prevOpenSubmenu) => {
       if (
         prevOpenSubmenu &&
-        prevOpenSubmenu.type === menuType &&
-        prevOpenSubmenu.index === index
+        prevOpenSubmenu.sectionIndex === sectionIndex &&
+        prevOpenSubmenu.itemIndex === itemIndex
       ) {
         return null;
       }
-      return { type: menuType, index };
+      return { sectionIndex, itemIndex };
     });
   };
 
-  const renderMenuItems = (items: NavItem[], menuType: "main" | "others") => (
+  const renderMenuItems = (items: NavItem[], sectionIndex: number) => (
     <ul className="flex flex-col gap-4">
-      {items.map((nav, index) => (
+      {items.map((nav, itemIndex) => (
         <li key={nav.name}>
           {nav.subItems ? (
             <button
-              onClick={() => handleSubmenuToggle(index, menuType)}
+              onClick={() => handleSubmenuToggle(sectionIndex, itemIndex)}
               className={`menu-item group ${
-                openSubmenu?.type === menuType && openSubmenu?.index === index
+                openSubmenu?.sectionIndex === sectionIndex &&
+                openSubmenu?.itemIndex === itemIndex
                   ? "menu-item-active"
                   : "menu-item-inactive"
               } cursor-pointer ${
@@ -224,7 +277,8 @@ const AppSidebar: React.FC = () => {
             >
               <span
                 className={`menu-item-icon-size  ${
-                  openSubmenu?.type === menuType && openSubmenu?.index === index
+                  openSubmenu?.sectionIndex === sectionIndex &&
+                  openSubmenu?.itemIndex === itemIndex
                     ? "menu-item-icon-active"
                     : "menu-item-icon-inactive"
                 }`}
@@ -237,8 +291,8 @@ const AppSidebar: React.FC = () => {
               {(isExpanded || isHovered || isMobileOpen) && (
                 <ChevronDownIcon
                   className={`ml-auto w-5 h-5 transition-transform duration-200 ${
-                    openSubmenu?.type === menuType &&
-                    openSubmenu?.index === index
+                    openSubmenu?.sectionIndex === sectionIndex &&
+                    openSubmenu?.itemIndex === itemIndex
                       ? "rotate-180 text-brand-500"
                       : ""
                   }`}
@@ -271,13 +325,14 @@ const AppSidebar: React.FC = () => {
           {nav.subItems && (isExpanded || isHovered || isMobileOpen) && (
             <div
               ref={(el) => {
-                subMenuRefs.current[`${menuType}-${index}`] = el;
+                subMenuRefs.current[`${sectionIndex}-${itemIndex}`] = el;
               }}
               className="overflow-hidden transition-all duration-300"
               style={{
                 height:
-                  openSubmenu?.type === menuType && openSubmenu?.index === index
-                    ? `${subMenuHeight[`${menuType}-${index}`]}px`
+                  openSubmenu?.sectionIndex === sectionIndex &&
+                  openSubmenu?.itemIndex === itemIndex
+                    ? `${subMenuHeight[`${sectionIndex}-${itemIndex}`]}px`
                     : "0px",
               }}
             >
@@ -378,42 +433,27 @@ const AppSidebar: React.FC = () => {
       </div>
       <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
         <nav className="mb-6">
-          <div className="flex flex-col gap-4">
-            <div>
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  "Menu"
-                ) : (
-                  <HorizontaLDots className="size-6" />
-                )}
-              </h2>
-              {renderMenuItems(navItems, "main")}
-            </div>
-            <div className="">
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  "Others"
-                ) : (
-                  <HorizontaLDots />
-                )}
-              </h2>
-              {renderMenuItems(othersItems, "others")}
-            </div>
+          <div className="flex flex-col gap-6">
+            {menuSections.map((section, sectionIndex) => (
+              <div key={section.title}>
+                <h2
+                  className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
+                    !isExpanded && !isHovered
+                      ? "lg:justify-center"
+                      : "justify-start"
+                  }`}
+                >
+                  {isExpanded || isHovered || isMobileOpen ? (
+                    section.title
+                  ) : (
+                    <HorizontaLDots className="size-6" />
+                  )}
+                </h2>
+                {renderMenuItems(section.items, sectionIndex)}
+              </div>
+            ))}
           </div>
         </nav>
-        {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null}
       </div>
     </aside>
   );
