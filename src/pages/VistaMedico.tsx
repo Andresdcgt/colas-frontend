@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PageMeta from "../components/common/PageMeta";
 import Button from "../components/ui/button/Button";
+import Badge from "../components/ui/badge/Badge";
 import { useTurnosSocket } from "../hooks/useTurnosSocket";
 import {
   getTurnos,
@@ -12,33 +13,31 @@ import {
   type Medico,
   crearConsultaMedica,
   crearReceta,
-  getConsultoriosColasResumen,
-  reasignarTurno,
-  type ConsultorioColaResumen,
 } from "../lib/api";
 import { Modal } from "../components/ui/modal";
+import TrasladarTurnoModal from "../components/turnos/TrasladarTurnoModal";
 import { filterByTenant } from "../lib/tenant-filter";
 import { useAuth } from "../context/AuthContext";
 
-function groupByConsultorio(turnos: Turno[]): Map<string, { nombre: string; turnos: Turno[] }> {
-  const map = new Map<string, { nombre: string; turnos: Turno[] }>();
+const CONSULTORIO_MEDICO_KEY = "vista_medico_consultorio";
+
+type ConsultorioGrupo = { id: string; nombre: string; turnos: Turno[] };
+
+function groupByConsultorio(turnos: Turno[]): ConsultorioGrupo[] {
+  const map = new Map<string, ConsultorioGrupo>();
   for (const t of turnos) {
     const key = t.consultorio_id;
     const nombre = t.consultorio_nombre ?? "Consultorio";
-    if (!map.has(key)) map.set(key, { nombre, turnos: [] });
+    if (!map.has(key)) map.set(key, { id: key, nombre, turnos: [] });
     map.get(key)!.turnos.push(t);
   }
-  for (const [, g] of map) {
-    g.turnos.sort((a, b) => a.orden - b.orden);
-  }
-  return map;
+  return Array.from(map.values())
+    .map((g) => ({ ...g, turnos: [...g.turnos].sort((a, b) => a.orden - b.orden) }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }
 
-/** Siguiente turno a actuar: primero pendiente, o el que está llamado/en_atencion */
-function siguienteEnCola(turnos: Turno[]): Turno | null {
-  const activo = turnos.find((t) => t.estado === "llamado" || t.estado === "en_atencion");
-  if (activo) return activo;
-  return turnos.find((t) => t.estado === "pendiente") ?? null;
+function contarPorEstado(lista: Turno[], estado: string) {
+  return lista.filter((t) => t.estado === estado).length;
 }
 
 export default function VistaMedico() {
@@ -101,13 +100,10 @@ export default function VistaMedico() {
     },
   ]);
 
-  const [reasignarOpen, setReasignarOpen] = useState(false);
-  const [reasignarLoading, setReasignarLoading] = useState(false);
-  const [reasignarError, setReasignarError] = useState<string | null>(null);
-  const [reasignarConsultorioId, setReasignarConsultorioId] = useState<string>("");
-  const [reasignarMotivo, setReasignarMotivo] = useState("");
-  const [turnoAReasignar, setTurnoAReasignar] = useState<Turno | null>(null);
-  const [consultoriosResumen, setConsultoriosResumen] = useState<ConsultorioColaResumen[]>([]);
+  const [turnoATrasladar, setTurnoATrasladar] = useState<Turno | null>(null);
+  const [consultorioId, setConsultorioId] = useState(
+    () => sessionStorage.getItem(CONSULTORIO_MEDICO_KEY) || ""
+  );
 
   const load = useCallback(async () => {
     setError("");
@@ -167,12 +163,58 @@ export default function VistaMedico() {
     };
   }, [user]);
 
-  const grupos = groupByConsultorio(turnos);
+  const grupos = useMemo(
+    () =>
+      groupByConsultorio(
+        turnos.filter((t) => !["finalizado", "cancelado", "no_show"].includes(t.estado))
+      ),
+    [turnos]
+  );
 
-  const pacienteActivo =
-    turnos.find((t) => t.estado === "en_atencion") ??
-    turnos.find((t) => t.estado === "llamado") ??
-    null;
+  const grupoActivo = useMemo(() => {
+    if (grupos.length === 0) return null;
+    if (consultorioId && grupos.some((g) => g.id === consultorioId)) {
+      return grupos.find((g) => g.id === consultorioId) ?? grupos[0];
+    }
+    const conActividad = grupos.find((g) =>
+      g.turnos.some((t) => t.estado === "en_atencion" || t.estado === "llamado")
+    );
+    const conPendientes = grupos.find((g) => g.turnos.some((t) => t.estado === "pendiente"));
+    return conActividad ?? conPendientes ?? grupos[0];
+  }, [grupos, consultorioId]);
+
+  useEffect(() => {
+    if (grupos.length === 0) return;
+    if (!consultorioId || !grupos.some((g) => g.id === consultorioId)) {
+      const inicial =
+        grupos.find((g) => g.turnos.some((t) => t.estado === "en_atencion" || t.estado === "llamado")) ??
+        grupos.find((g) => g.turnos.some((t) => t.estado === "pendiente")) ??
+        grupos[0];
+      setConsultorioId(inicial.id);
+      sessionStorage.setItem(CONSULTORIO_MEDICO_KEY, inicial.id);
+    }
+  }, [grupos, consultorioId]);
+
+  const lista = grupoActivo?.turnos ?? [];
+  const pacienteEnAtencion = lista.find((t) => t.estado === "en_atencion") ?? null;
+  const pacienteLlamado = lista.find((t) => t.estado === "llamado") ?? null;
+  const enEspera = lista.filter((t) => t.estado === "pendiente");
+
+  const pacienteActivo = pacienteEnAtencion ?? pacienteLlamado ?? null;
+
+  const stats = useMemo(
+    () => ({
+      pendientes: turnos.filter((t) => t.estado === "pendiente").length,
+      llamados: turnos.filter((t) => t.estado === "llamado").length,
+      enAtencion: turnos.filter((t) => t.estado === "en_atencion").length,
+    }),
+    [turnos]
+  );
+
+  const seleccionarConsultorio = (id: string) => {
+    setConsultorioId(id);
+    sessionStorage.setItem(CONSULTORIO_MEDICO_KEY, id);
+  };
 
   useEffect(() => {
     if (!pacienteActivo) {
@@ -443,284 +485,322 @@ export default function VistaMedico() {
     }
   };
 
-  const abrirModalReasignar = async (turno: Turno) => {
-    setTurnoAReasignar(turno);
-    setReasignarConsultorioId("");
-    setReasignarMotivo("");
-    setReasignarError(null);
-    setConsultoriosResumen([]);
-    setReasignarOpen(true);
-
-    setReasignarLoading(true);
-    try {
-      const data = await getConsultoriosColasResumen({ fecha });
-      setConsultoriosResumen(data.consultorios || []);
-    } catch (e) {
-      setReasignarError(
-        e instanceof Error ? e.message : "Error al cargar colas de consultorios"
-      );
-    } finally {
-      setReasignarLoading(false);
-    }
-  };
-
-  const handleReasignarTurno = async () => {
-    if (!turnoAReasignar) return;
-    if (!reasignarConsultorioId) {
-      setReasignarError("Elegí un consultorio destino para mover el turno.");
-      return;
-    }
-
-    setReasignarError(null);
-    setReasignarLoading(true);
-
-    try {
-      await reasignarTurno(turnoAReasignar.id, {
-        consultorio_id_destino: reasignarConsultorioId,
-        motivo: reasignarMotivo.trim() || undefined,
-      });
-      await load();
-      setReasignarOpen(false);
-    } catch (e) {
-      setReasignarError(
-        e instanceof Error
-          ? e.message
-          : "Error al reasignar el turno. Intenta nuevamente."
-      );
-    } finally {
-      setReasignarLoading(false);
-    }
-  };
-
   return (
-    <div>
+    <div className="space-y-4">
       <PageMeta
         title="Vista Médico | Colas Turnos"
-        description="Siguiente turno por consultorio"
+        description="Atención de pacientes por consultorio"
       />
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+      {/* Barra superior */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-white/90 sm:text-3xl">
-            Vista médico
-          </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Siguiente en cola por consultorio. Llamar → En atención → Finalizar.
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Vista médico</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {stats.pendientes} en espera · {stats.llamados} llamados · {stats.enAtencion} en consultorio
+            {medico && (
+              <span className="ml-2 text-brand-600 dark:text-brand-400">
+                · Dr/a {medico.nombre}
+              </span>
+            )}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <label htmlFor="vista-medico-fecha" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Fecha
-          </label>
-          <input
-            id="vista-medico-fecha"
-            type="date"
-            value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
-            className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-          />
-        </div>
+        <input
+          id="vista-medico-fecha"
+          type="date"
+          value={fecha}
+          onChange={(e) => setFecha(e.target.value)}
+          className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+        />
       </div>
 
+      {medicoError && (
+        <div className="rounded-lg bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+          {medicoError}
+        </div>
+      )}
+
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
           {error}
         </div>
       )}
 
       {loading ? (
         <p className="py-12 text-center text-gray-500">Cargando…</p>
-      ) : grupos.size === 0 ? (
-        <p className="py-12 text-center text-gray-500">
-          No hay turnos para esta fecha.
-        </p>
+      ) : grupos.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-gray-300 py-16 text-center dark:border-gray-700">
+          <p className="text-gray-600 dark:text-gray-400">No hay turnos activos para esta fecha.</p>
+        </div>
       ) : (
-        <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)]">
-          <div className="space-y-4">
-            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-2">
-              {Array.from(grupos.entries()).map(([consultorioId, { nombre, turnos: lista }]) => {
-                const siguiente = siguienteEnCola(lista);
-                return (
-                  <div
-                    key={consultorioId}
-                    className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800/50"
-                  >
-                    <h2 className="mb-4 text-lg font-semibold text-gray-800 dark:text-white/90">
-                      {nombre}
-                    </h2>
-                    {siguiente ? (
-                      <div className="space-y-4">
-                        <div className="rounded-lg bg-gray-50 px-4 py-3 dark:bg-gray-800/80">
-                          <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                            Turno {siguiente.numero_turno}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+          {/* Consultorios */}
+          <aside className="w-full shrink-0 lg:w-64">
+            <div className="hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.02] lg:block">
+              <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Mis consultorios</h2>
+              </div>
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                {grupos.map((g) => {
+                  const pend = contarPorEstado(g.turnos, "pendiente");
+                  const llam = contarPorEstado(g.turnos, "llamado");
+                  const atencion = contarPorEstado(g.turnos, "en_atencion");
+                  const activo = g.id === grupoActivo?.id;
+                  return (
+                    <li key={g.id}>
+                      <button
+                        type="button"
+                        onClick={() => seleccionarConsultorio(g.id)}
+                        className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors ${
+                          activo
+                            ? "bg-brand-50 dark:bg-brand-500/10"
+                            : "hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p
+                            className={`truncate text-sm font-medium ${
+                              activo ? "text-brand-700 dark:text-brand-300" : "text-gray-900 dark:text-white"
+                            }`}
+                          >
+                            {g.nombre}
                           </p>
-                          <p className="mt-1 text-lg text-gray-700 dark:text-gray-300">
-                            {siguiente.paciente_apellido}, {siguiente.paciente_nombre}
-                          </p>
-                          {siguiente.paciente_dni && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                              DNI {siguiente.paciente_dni}
-                            </p>
+                          <p className="text-xs text-gray-500">{g.turnos.length} activos</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {atencion > 0 && (
+                            <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-brand-500/20 dark:text-brand-300">
+                              {atencion}
+                            </span>
+                          )}
+                          {llam > 0 && <span className="h-2 w-2 rounded-full bg-amber-500" title="Paciente llamado" />}
+                          {pend > 0 && (
+                            <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                              {pend}
+                            </span>
                           )}
                         </div>
-                        <div className="flex flex-col gap-2">
-                          {siguiente.estado === "pendiente" && (
-                            <Button
-                              size="md"
-                              disabled={updatingId === siguiente.id}
-                              onClick={() => handleAction(siguiente, "llamado")}
-                              className="w-full py-3 text-base font-semibold"
-                            >
-                              {updatingId === siguiente.id ? "…" : "Llamar siguiente"}
-                            </Button>
-                          )}
-                          {siguiente.estado === "llamado" && (
-                            <Button
-                              size="md"
-                              disabled={updatingId === siguiente.id}
-                              onClick={() => handleAction(siguiente, "en_atencion")}
-                              className="w-full py-3 text-base font-semibold"
-                            >
-                              {updatingId === siguiente.id ? "…" : "En atención"}
-                            </Button>
-                          )}
-                          {siguiente.estado === "en_atencion" && (
-                            <Button
-                              size="md"
-                              disabled={updatingId === siguiente.id}
-                              onClick={() => handleAction(siguiente, "finalizado")}
-                              className="w-full py-3 text-base font-semibold"
-                            >
-                              {updatingId === siguiente.id ? "…" : "Finalizar"}
-                            </Button>
-                          )}
-                          {(siguiente.estado === "llamado" ||
-                            siguiente.estado === "en_atencion") && (
-                            <Button
-                              size="md"
-                              variant="outline"
-                              disabled={updatingId === siguiente.id}
-                              onClick={() => {
-                                void abrirModalReasignar(siguiente);
-                              }}
-                              className="w-full py-2 text-sm font-medium"
-                            >
-                              Reasignar a otro consultorio
-                            </Button>
-                          )}
-                        </div>
-                        {lista.filter((t) => t.estado === "pendiente").length > 1 && (
-                          <p className="text-center text-xs text-gray-500 dark:text-gray-400">
-                            {lista.filter((t) => t.estado === "pendiente").length - 1} más en
-                            espera
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+            <select
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm lg:hidden dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+              value={grupoActivo?.id ?? ""}
+              onChange={(e) => seleccionarConsultorio(e.target.value)}
+            >
+              {grupos.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.nombre}
+                </option>
+              ))}
+            </select>
+          </aside>
+
+          {/* Panel principal */}
+          <main className="min-w-0 flex-1 space-y-4">
+            {grupoActivo && (
+              <>
+                <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-white/[0.02]">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">{grupoActivo.nombre}</h2>
+                  <p className="text-sm text-gray-500">
+                    Recepción gestiona los llamados · tú recibes al paciente y finalizas la consulta
+                  </p>
+                </div>
+
+                {/* Paciente en consultorio */}
+                {pacienteEnAtencion && (
+                  <section className="rounded-2xl border-2 border-brand-500 bg-brand-50/40 p-5 dark:border-brand-600 dark:bg-brand-500/5">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-brand-800 dark:text-brand-300">
+                        En consultorio
+                      </h3>
+                      <Badge color="primary" size="sm" variant="light">
+                        Atendiendo
+                      </Badge>
+                    </div>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <span className="font-mono text-4xl font-bold text-brand-700 dark:text-brand-400">
+                          {pacienteEnAtencion.numero_turno}
+                        </span>
+                        <p className="mt-1 text-lg font-medium text-gray-900 dark:text-white">
+                          {pacienteEnAtencion.paciente_apellido}, {pacienteEnAtencion.paciente_nombre}
+                        </p>
+                        {pacienteEnAtencion.paciente_dni && (
+                          <p className="text-sm text-gray-500">DNI {pacienteEnAtencion.paciente_dni}</p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="md"
+                          disabled={updatingId === pacienteEnAtencion.id}
+                          onClick={() => void handleAction(pacienteEnAtencion, "finalizado")}
+                        >
+                          {updatingId === pacienteEnAtencion.id ? "…" : "Finalizar consulta"}
+                        </Button>
+                        <Button
+                          size="md"
+                          variant="outline"
+                          disabled={updatingId === pacienteEnAtencion.id}
+                          onClick={() => setTurnoATrasladar(pacienteEnAtencion)}
+                        >
+                          Trasladar
+                        </Button>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                {/* Paciente llamado — esperando entrar */}
+                {pacienteLlamado && !pacienteEnAtencion && (
+                  <section className="rounded-2xl border-2 border-amber-400 bg-amber-50/50 p-5 dark:border-amber-600 dark:bg-amber-500/5">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                        Paciente llamado
+                      </h3>
+                      <Badge color="warning" size="sm" variant="light">
+                        En camino
+                      </Badge>
+                    </div>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <span className="font-mono text-4xl font-bold text-amber-700 dark:text-amber-400">
+                          {pacienteLlamado.numero_turno}
+                        </span>
+                        <p className="mt-1 text-lg font-medium text-gray-900 dark:text-white">
+                          {pacienteLlamado.paciente_apellido}, {pacienteLlamado.paciente_nombre}
+                        </p>
+                        {pacienteLlamado.paciente_dni && (
+                          <p className="text-sm text-gray-500">DNI {pacienteLlamado.paciente_dni}</p>
+                        )}
+                        {(pacienteLlamado.veces_llamado ?? 0) > 0 && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Llamado {pacienteLlamado.veces_llamado} vez/veces por recepción
                           </p>
                         )}
                       </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="md"
+                          disabled={updatingId === pacienteLlamado.id}
+                          onClick={() => void handleAction(pacienteLlamado, "en_atencion")}
+                        >
+                          {updatingId === pacienteLlamado.id ? "…" : "Recibir en consultorio"}
+                        </Button>
+                        <Button
+                          size="md"
+                          variant="outline"
+                          disabled={updatingId === pacienteLlamado.id}
+                          onClick={() => setTurnoATrasladar(pacienteLlamado)}
+                        >
+                          Trasladar
+                        </Button>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                {/* Sin paciente activo */}
+                {!pacienteEnAtencion && !pacienteLlamado && (
+                  <section className="rounded-2xl border border-dashed border-gray-300 bg-gray-50/50 px-4 py-10 text-center dark:border-gray-700 dark:bg-gray-800/30">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      No hay paciente llamado ni en consultorio.
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Cuando recepción llame a alguien, aparecerá aquí para que lo recibas.
+                    </p>
+                  </section>
+                )}
+
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                  {/* Cola + historial breve */}
+                  <div className="space-y-4">
+                    <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.02]">
+                      <h3 className="border-b border-gray-100 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-800">
+                        Cola de espera ({enEspera.length})
+                      </h3>
+                      {enEspera.length === 0 ? (
+                        <p className="px-4 py-6 text-center text-sm text-gray-500">Nadie en espera.</p>
+                      ) : (
+                        <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {enEspera.map((t, i) => (
+                            <li key={t.id} className="flex items-center gap-3 px-4 py-3">
+                              <span className="w-5 text-center text-xs text-gray-400">{i + 1}</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-lg font-bold text-gray-700 dark:text-gray-300">
+                                    {t.numero_turno}
+                                  </span>
+                                  {t.prioridad === "urgencia" && (
+                                    <Badge color="error" size="sm" variant="light">
+                                      URG
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="truncate text-sm text-gray-600 dark:text-gray-400">
+                                  {t.paciente_apellido}, {t.paciente_nombre}
+                                </p>
+                              </div>
+                              <Badge color="info" size="sm" variant="light">
+                                Espera
+                              </Badge>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+
+                    {pacienteActivo && (
+                      <section className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.02]">
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Historia clínica</h3>
+                        {medicoLoading && (
+                          <p className="mt-2 text-xs text-gray-500">Cargando perfil médico…</p>
+                        )}
+                        {historialLoading ? (
+                          <p className="mt-2 text-xs text-gray-500">Cargando historial…</p>
+                        ) : historialError ? (
+                          <p className="mt-2 text-xs text-red-600 dark:text-red-400">{historialError}</p>
+                        ) : historialConsultas.length === 0 ? (
+                          <p className="mt-2 text-xs text-gray-500">Sin consultas previas registradas.</p>
+                        ) : (
+                          <ul className="mt-2 space-y-2">
+                            {historialConsultas.slice(0, 3).map((c) => (
+                              <li key={c.consulta_id} className="text-xs text-gray-600 dark:text-gray-400">
+                                <span className="font-medium text-gray-800 dark:text-gray-200">
+                                  {new Date(c.fecha_hora).toLocaleDateString()}
+                                </span>
+                                {c.diagnostico_ppal && ` — ${c.diagnostico_ppal}`}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setHistorialOpen(true)}
+                          className="mt-3 w-full justify-center"
+                          disabled={!pacienteActivo}
+                        >
+                          Ver historia completa
+                        </Button>
+                      </section>
+                    )}
+                  </div>
+
+                  {/* Consulta actual */}
+                  <section className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.02]">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Consulta actual</h3>
+
+                    {!pacienteEnAtencion ? (
+                      <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+                        Recibí al paciente con{" "}
+                        <span className="font-medium">“Recibir en consultorio”</span> para registrar motivo,
+                        diagnóstico y signos vitales.
+                      </p>
                     ) : (
-                      <p className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                        Sin turnos pendientes en este consultorio.
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800/70">
-              <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-                Paciente actual
-              </h2>
-
-              {!pacienteActivo ? (
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                  No hay ningún turno en atención en este momento. Cuando cambies un turno a
-                  <span className="font-semibold"> “En atención”</span>, verás aquí los datos
-                  del paciente.
-                </p>
-              ) : (
-                <div className="mt-3 space-y-3 text-sm">
-                  <div>
-                    <p className="text-base font-semibold text-gray-900 dark:text-white">
-                      {pacienteActivo.paciente_apellido}, {pacienteActivo.paciente_nombre}
-                    </p>
-                    {pacienteActivo.paciente_dni && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        DNI {pacienteActivo.paciente_dni}
-                      </p>
-                    )}
-                  </div>
-
-                  {medicoLoading && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Cargando información del médico…
-                    </p>
-                  )}
-                  {medicoError && (
-                    <p className="text-xs text-red-600 dark:text-red-400">{medicoError}</p>
-                  )}
-
-                  <div className="mt-2 border-t border-dashed border-gray-200 pt-3 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                    <p className="font-semibold text-gray-700 dark:text-gray-300">
-                      Últimas consultas
-                    </p>
-                    {historialLoading ? (
-                      <p className="mt-1 text-xs text-gray-500">Cargando historial…</p>
-                    ) : historialError ? (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                        {historialError}
-                      </p>
-                    ) : historialConsultas.length === 0 ? (
-                      <p className="mt-1 text-xs">
-                        Aún no hay consultas registradas para este paciente.
-                      </p>
-                    ) : (
-                      <ul className="mt-1 space-y-1">
-                        {historialConsultas.slice(0, 3).map((c) => (
-                          <li key={c.consulta_id}>
-                            <span className="font-medium text-gray-700 dark:text-gray-200">
-                              {new Date(c.fecha_hora).toLocaleDateString()}
-                            </span>
-                            {c.diagnostico_ppal && (
-                              <span className="text-gray-600 dark:text-gray-300">
-                                {" "}
-                                — {c.diagnostico_ppal}
-                              </span>
-                            )}
-                            <span className="block text-[11px] text-gray-500 dark:text-gray-400">
-                              Atendido por {c.medico_nombre}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-
-                  <div className="pt-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setHistorialOpen(true)}
-                      className="w-full justify-center"
-                    >
-                      Historia clínica
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800/70">
-              <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-                Consulta actual
-              </h2>
-
-              {!pacienteActivo ? (
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                  Seleccioná un turno y pasalo a <span className="font-semibold">“En atención”</span>{" "}
-                  para registrar la consulta médica.
-                </p>
-              ) : (
                 <form
                   className="mt-4 space-y-4"
                   onSubmit={(e) => {
@@ -916,13 +996,16 @@ export default function VistaMedico() {
                     </Button>
                   </div>
                 </form>
-              )}
-            </div>
-          </div>
+                    )}
+                  </section>
+                </div>
+              </>
+            )}
+          </main>
         </div>
       )}
 
-      <p className="mt-6 text-center text-xs text-gray-400 dark:text-gray-500">
+      <p className="text-center text-xs text-gray-400 dark:text-gray-500">
         Se actualiza en tiempo real por WebSocket.
       </p>
 
@@ -1007,82 +1090,12 @@ export default function VistaMedico() {
         </div>
       </Modal>
 
-      <Modal isOpen={reasignarOpen} onClose={() => setReasignarOpen(false)} className="max-w-lg">
-        <div className="p-4 sm:p-6">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-            Reasignar a otro consultorio
-          </h2>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Mové el turno del consultorio actual a otro consultorio de la clínica.
-          </p>
-
-          <div className="mt-4 space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                Consultorio destino
-              </label>
-              <select
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-                value={reasignarConsultorioId}
-                onChange={(e) => setReasignarConsultorioId(e.target.value)}
-                disabled={reasignarLoading}
-              >
-                <option value="">Seleccioná un consultorio</option>
-                {consultoriosResumen.map((c) => (
-                  <option key={c.consultorio_id} value={c.consultorio_id}>
-                    {c.consultorio_nombre}{" "}
-                    {c.medico_nombre ? `— Dr/a ${c.medico_nombre}` : ""} ·{" "}
-                    {c.pacientes_en_cola} en cola
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                Motivo de retransferencia (opcional)
-              </label>
-              <textarea
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-                rows={2}
-                value={reasignarMotivo}
-                onChange={(e) => setReasignarMotivo(e.target.value)}
-              />
-            </div>
-
-            {reasignarLoading && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Cargando colas de consultorios…
-              </p>
-            )}
-            {reasignarError && (
-              <p className="text-sm text-red-600 dark:text-red-400">{reasignarError}</p>
-            )}
-
-            <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-end">
-              <Button
-                size="md"
-                variant="outline"
-                disabled={reasignarLoading}
-                onClick={() => setReasignarOpen(false)}
-                className="w-full sm:w-auto"
-              >
-                Cancelar
-              </Button>
-              <Button
-                size="md"
-                disabled={reasignarLoading}
-                onClick={() => {
-                  void handleReasignarTurno();
-                }}
-                className="w-full sm:w-auto"
-              >
-                {reasignarLoading ? "Moviendo…" : "Mover turno"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </Modal>
+      <TrasladarTurnoModal
+        turno={turnoATrasladar}
+        fecha={fecha}
+        onClose={() => setTurnoATrasladar(null)}
+        onSuccess={() => void load()}
+      />
 
       <Modal isOpen={recetaOpen} onClose={() => setRecetaOpen(false)} className="max-w-2xl">
         <div className="p-4 sm:p-6">

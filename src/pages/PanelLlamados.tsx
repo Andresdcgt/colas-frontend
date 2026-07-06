@@ -6,6 +6,7 @@ import Badge from "../components/ui/badge/Badge";
 import Label from "../components/form/Label";
 import TextArea from "../components/form/input/TextArea";
 import { Modal } from "../components/ui/modal";
+import TrasladarTurnoModal from "../components/turnos/TrasladarTurnoModal";
 import { useAuth } from "../context/AuthContext";
 import { filterByTenant } from "../lib/tenant-filter";
 import { useTurnosSocket } from "../hooks/useTurnosSocket";
@@ -84,6 +85,7 @@ function TurnoEnLlamado({
   onPresente,
   onReencolar,
   onNoAsistio,
+  onTrasladar,
 }: {
   turno: Turno;
   canOperar: boolean;
@@ -92,6 +94,7 @@ function TurnoEnLlamado({
   onPresente: () => void;
   onReencolar: () => void;
   onNoAsistio: () => void;
+  onTrasladar: () => void;
 }) {
   const veces = turno.veces_llamado ?? 0;
   const minLlamado = minutosDesde(turno.ultima_llamada_at);
@@ -137,6 +140,9 @@ function TurnoEnLlamado({
               Pasar al final
             </Button>
           )}
+          <Button size="md" variant="outline" disabled={busy} onClick={onTrasladar}>
+            Trasladar
+          </Button>
           {agotado && (
             <Button
               size="md"
@@ -165,6 +171,7 @@ export default function PanelLlamados() {
   const [tvSlug, setTvSlug] = useState(() => localStorage.getItem(TV_SLUG_KEY) || "");
 
   const [cierreTurno, setCierreTurno] = useState<Turno | null>(null);
+  const [turnoATrasladar, setTurnoATrasladar] = useState<Turno | null>(null);
   const [notaNoAsistio, setNotaNoAsistio] = useState("");
   const [cerrando, setCerrando] = useState(false);
   const [consultorioId, setConsultorioId] = useState(
@@ -615,6 +622,7 @@ export default function PanelLlamados() {
                         setCierreTurno(llamadoActivo);
                         setNotaNoAsistio("");
                       }}
+                      onTrasladar={() => setTurnoATrasladar(llamadoActivo)}
                     />
                   </section>
                 )}
@@ -636,9 +644,20 @@ export default function PanelLlamados() {
                               {t.paciente_apellido}, {t.paciente_nombre}
                             </span>
                           </div>
-                          <Badge color="primary" size="sm" variant="light">
-                            En atención
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge color="primary" size="sm" variant="light">
+                              En atención
+                            </Badge>
+                            {canOperar && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setTurnoATrasladar(t)}
+                              >
+                                Trasladar
+                              </Button>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -693,14 +712,24 @@ export default function PanelLlamados() {
                               </div>
                             </div>
                             {canOperar && !esSiguiente && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={busy}
-                                onClick={() => void handleLlamarIndividual(t, lista)}
-                              >
-                                {busy ? "…" : "Llamar fuera de orden"}
-                              </Button>
+                              <div className="flex shrink-0 gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy}
+                                  onClick={() => void handleLlamarIndividual(t, lista)}
+                                >
+                                  {busy ? "…" : "Llamar fuera de orden"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy}
+                                  onClick={() => setTurnoATrasladar(t)}
+                                >
+                                  Trasladar
+                                </Button>
+                              </div>
                             )}
                           </li>
                         );
@@ -713,6 +742,13 @@ export default function PanelLlamados() {
           </main>
         </div>
       )}
+
+      <TrasladarTurnoModal
+        turno={turnoATrasladar}
+        fecha={fecha}
+        onClose={() => setTurnoATrasladar(null)}
+        onSuccess={() => void load()}
+      />
 
       <Modal
         isOpen={!!cierreTurno}

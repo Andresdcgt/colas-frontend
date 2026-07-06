@@ -225,6 +225,37 @@ export async function createPaciente(body: {
   return res.json();
 }
 
+// --- IGSS afiliación ---
+export type AfiliacionIgssResult = {
+  elegible: boolean;
+  codigo: string;
+  mensaje: string;
+  numero_afiliacion: string | null;
+  nombre_oficial: string | null;
+  tipo_afiliacion: string | null;
+  fecha_vigencia: string | null;
+  fuente: "igss" | "mock";
+  validado_at: string;
+};
+
+export async function validarAfiliacionIgss(body: {
+  cui: string;
+  nombre?: string;
+  apellido?: string;
+  fecha_nacimiento?: string;
+}): Promise<AfiliacionIgssResult> {
+  const res = await fetchWithAuth("/api/igss/validar-afiliacion", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || "Error al validar afiliación IGSS");
+  }
+  return res.json();
+}
+
 // --- Sucursales ---
 export interface Sucursal {
   id: string;

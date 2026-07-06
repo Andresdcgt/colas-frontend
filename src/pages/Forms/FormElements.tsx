@@ -18,6 +18,8 @@ import {
   enviarTurno,
   cancelarTurno,
   recuperarTurno,
+  validarAfiliacionIgss,
+  type AfiliacionIgssResult,
   type Consultorio,
   type Paciente,
   type Turno,
@@ -30,6 +32,8 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import { Modal } from "../../components/ui/modal";
+import TrasladarTurnoModal from "../../components/turnos/TrasladarTurnoModal";
+import MrzAfiliadoPanel from "../../components/recepcion/MrzAfiliadoPanel";
 import TextArea from "../../components/form/input/TextArea";
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -111,9 +115,13 @@ export default function FormElements() {
   const [enviadoMsg, setEnviadoMsg] = useState<{ texto: string; ok: boolean } | null>(null);
 
   const [turnoACancelar, setTurnoACancelar] = useState<Turno | null>(null);
+  const [turnoATrasladar, setTurnoATrasladar] = useState<Turno | null>(null);
   const [motivoCancelacion, setMotivoCancelacion] = useState("");
   const [cancelando, setCancelando] = useState(false);
   const [recuperandoId, setRecuperandoId] = useState<string | null>(null);
+  const [afiliacion, setAfiliacion] = useState<AfiliacionIgssResult | null>(null);
+  const [validandoPacienteId, setValidandoPacienteId] = useState<string | null>(null);
+  const [busquedaManual, setBusquedaManual] = useState(false);
 
   const consultoriosAgrupados = useMemo(() => groupConsultorios(consultorios), [consultorios]);
 
@@ -211,6 +219,10 @@ export default function FormElements() {
       setError("Selecciona consultorio y paciente");
       return;
     }
+    if (!afiliacion?.elegible) {
+      setError("Validá la afiliación IGSS con el lector MRZ o CUI antes de asignar turno.");
+      return;
+    }
     setSubmitting(true);
     try {
       const consultorio = consultorios.find((c) => c.id === form.consultorio_id);
@@ -234,6 +246,7 @@ export default function FormElements() {
         prioridad: "normal",
       }));
       setPacienteSearch("");
+      setAfiliacion(null);
       await loadTurnos();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al crear turno");
@@ -292,6 +305,44 @@ export default function FormElements() {
       setError(e instanceof Error ? e.message : "Error al cancelar turno");
     } finally {
       setCancelando(false);
+    }
+  };
+
+  const handlePacienteMrz = (p: Paciente, aff: AfiliacionIgssResult) => {
+    setPacientes((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, p]));
+    setForm((f) => ({ ...f, paciente_id: p.id }));
+    setAfiliacion(aff);
+    setBusquedaManual(false);
+    setPacienteSearch("");
+  };
+
+  const limpiarPaciente = () => {
+    setForm((f) => ({ ...f, paciente_id: "" }));
+    setAfiliacion(null);
+    setPacienteSearch("");
+  };
+
+  const seleccionarPacienteManual = async (p: Paciente) => {
+    setValidandoPacienteId(p.id);
+    setError("");
+    try {
+      const resultado = await validarAfiliacionIgss({
+        cui: p.dni.replace(/\D/g, "") || p.dni,
+        nombre: p.nombre,
+        apellido: p.apellido,
+      });
+      setAfiliacion(resultado);
+      if (!resultado.elegible) {
+        setError(resultado.mensaje);
+        return;
+      }
+      setForm((f) => ({ ...f, paciente_id: p.id }));
+      setPacienteSearch("");
+      setBusquedaManual(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al validar afiliación");
+    } finally {
+      setValidandoPacienteId(null);
     }
   };
 
@@ -359,7 +410,7 @@ export default function FormElements() {
               Recepción — turnos del día
             </h1>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              Asigna turnos y consulta el estado de la cola en tiempo real.
+              Asigna turnos con lectura MRZ y validación de afiliación IGSS.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -458,9 +509,25 @@ export default function FormElements() {
                 )}
               </div>
 
+              {!(selectedPaciente && afiliacion?.elegible) && (
+                <MrzAfiliadoPanel
+                  key="mrz-scan"
+                  disabled={submitting}
+                  tenantId={selectedConsultorio?.tenant_id}
+                  onPacienteSelected={handlePacienteMrz}
+                  onClear={limpiarPaciente}
+                />
+              )}
+
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <Label>Paciente</Label>
+                  <button
+                    type="button"
+                    onClick={() => setBusquedaManual((v) => !v)}
+                    className="text-xs font-medium text-gray-500 hover:text-brand-600 dark:hover:text-brand-400"
+                  >
+                    {busquedaManual ? "Ocultar búsqueda manual" : "Búsqueda manual de paciente"}
+                  </button>
                   <Link
                     to="/basic-tables"
                     className="text-xs font-medium text-brand-500 hover:underline"
@@ -469,31 +536,31 @@ export default function FormElements() {
                   </Link>
                 </div>
 
-                {selectedPaciente ? (
+                {selectedPaciente && afiliacion?.elegible && !busquedaManual ? (
                   <div className="flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50/50 px-4 py-3 dark:border-brand-800 dark:bg-brand-500/10">
                     <div>
                       <p className="font-medium text-gray-900 dark:text-white">
                         {selectedPaciente.apellido}, {selectedPaciente.nombre}
                       </p>
-                      <p className="text-xs text-gray-500">DNI {selectedPaciente.dni}</p>
+                      <p className="text-xs text-gray-500">
+                        CUI {selectedPaciente.dni}
+                        {afiliacion.numero_afiliacion && ` · ${afiliacion.numero_afiliacion}`}
+                      </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        setForm((f) => ({ ...f, paciente_id: "" }));
-                        setPacienteSearch("");
-                      }}
+                      onClick={limpiarPaciente}
                       className="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-300"
                     >
                       Cambiar
                     </button>
                   </div>
-                ) : (
+                ) : busquedaManual ? (
                   <div className="space-y-2">
                     <Input
                       value={pacienteSearch}
                       onChange={(e) => setPacienteSearch(e.target.value)}
-                      placeholder="Buscar por nombre o DNI…"
+                      placeholder="Buscar por nombre o CUI…"
                       disabled={submitting}
                     />
                     {pacientes.length === 0 ? (
@@ -509,16 +576,16 @@ export default function FormElements() {
                           <li key={p.id}>
                             <button
                               type="button"
-                              onClick={() => {
-                                setForm((f) => ({ ...f, paciente_id: p.id }));
-                                setPacienteSearch("");
-                              }}
-                              className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-gray-50 dark:hover:bg-white/5"
+                              disabled={validandoPacienteId === p.id}
+                              onClick={() => void seleccionarPacienteManual(p)}
+                              className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-gray-50 disabled:opacity-50 dark:hover:bg-white/5"
                             >
                               <span className="font-medium text-gray-800 dark:text-gray-200">
                                 {p.apellido}, {p.nombre}
                               </span>
-                              <span className="text-xs text-gray-500">{p.dni}</span>
+                              <span className="text-xs text-gray-500">
+                                {validandoPacienteId === p.id ? "Validando IGSS…" : p.dni}
+                              </span>
                             </button>
                           </li>
                         ))}
@@ -526,8 +593,11 @@ export default function FormElements() {
                     ) : pacienteSearch.trim() ? (
                       <p className="text-xs text-gray-500">Sin resultados para &quot;{pacienteSearch}&quot;</p>
                     ) : null}
+                    <p className="text-[11px] text-gray-400">
+                      Al seleccionar se consulta derecho a atención en IGSS.
+                    </p>
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -570,7 +640,12 @@ export default function FormElements() {
 
               <button
                 type="submit"
-                disabled={submitting || pacientes.length === 0 || !form.consultorio_id || !form.paciente_id}
+                disabled={
+                  submitting ||
+                  !form.consultorio_id ||
+                  !form.paciente_id ||
+                  !afiliacion?.elegible
+                }
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-5 py-3.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? "Asignando turno…" : "Asignar turno"}
@@ -759,25 +834,36 @@ export default function FormElements() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          {CANCELABLES.has(t.estado) && (
-                            <button
-                              type="button"
-                              onClick={() => abrirCancelar(t)}
-                              className="text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                            >
-                              Cancelar
-                            </button>
-                          )}
-                          {t.estado === "cancelado" && (
-                            <button
-                              type="button"
-                              disabled={recuperandoId === t.id}
-                              onClick={() => void handleRecuperar(t)}
-                              className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50 dark:text-brand-400"
-                            >
-                              {recuperandoId === t.id ? "Recuperando…" : "Recuperar a cola"}
-                            </button>
-                          )}
+                          <div className="flex flex-col items-end gap-1">
+                            {CANCELABLES.has(t.estado) && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setTurnoATrasladar(t)}
+                                  className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                                >
+                                  Trasladar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => abrirCancelar(t)}
+                                  className="text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                                >
+                                  Cancelar
+                                </button>
+                              </>
+                            )}
+                            {t.estado === "cancelado" && (
+                              <button
+                                type="button"
+                                disabled={recuperandoId === t.id}
+                                onClick={() => void handleRecuperar(t)}
+                                className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50 dark:text-brand-400"
+                              >
+                                {recuperandoId === t.id ? "Recuperando…" : "Recuperar a cola"}
+                              </button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -834,6 +920,13 @@ export default function FormElements() {
           </div>
         </div>
       </Modal>
+
+      <TrasladarTurnoModal
+        turno={turnoATrasladar}
+        fecha={form.fecha}
+        onClose={() => setTurnoATrasladar(null)}
+        onSuccess={() => void loadTurnos()}
+      />
     </div>
   );
 }
