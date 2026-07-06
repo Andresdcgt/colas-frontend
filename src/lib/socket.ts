@@ -18,6 +18,13 @@ function getSocket() {
 
 export type TurnosUpdatedPayload = { fecha: string };
 
+export type TurnoLlamadoPayload = {
+  fecha: string;
+  numero_turno: string;
+  consultorio_nombre: string;
+  veces_llamado: number;
+};
+
 /**
  * Suscribe a actualizaciones en tiempo real de turnos.
  * El servidor emite "turnos:updated" con { fecha } cuando se crea o actualiza un turno.
@@ -35,6 +42,23 @@ export function subscribeTurnosUpdated(
   s.on("turnos:updated", handler);
   return () => {
     s.off("turnos:updated", handler);
+  };
+}
+
+/**
+ * Evento específico cuando se llama a un paciente (pantalla TV / audio).
+ */
+export function subscribeTurnoLlamado(
+  fecha: string,
+  callback: (payload: TurnoLlamadoPayload) => void
+): () => void {
+  const s = getSocket();
+  const handler = (payload: TurnoLlamadoPayload) => {
+    if (payload?.fecha === fecha) callback(payload);
+  };
+  s.on("turno:llamado", handler);
+  return () => {
+    s.off("turno:llamado", handler);
   };
 }
 

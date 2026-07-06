@@ -14,7 +14,8 @@ import BarChart from "./pages/Charts/BarChart";
 import Calendar from "./pages/Calendar";
 import BasicTables from "./pages/Tables/BasicTables";
 import FormElements from "./pages/Forms/FormElements";
-import Blank from "./pages/Blank";
+import PanelLlamados from "./pages/PanelLlamados";
+import PantallaEspera from "./pages/PantallaEspera";
 import AppLayout from "./layout/AppLayout";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { ScrollToTop } from "./components/common/ScrollToTop";
@@ -33,6 +34,9 @@ export default function App() {
       <Router>
         <ScrollToTop />
         <Routes>
+          {/* Pantalla TV pública (sin login) */}
+          <Route path="/pantalla-espera" element={<PantallaEspera />} />
+
           {/* Rutas protegidas: requieren login; si no hay sesión → /signin */}
           <Route element={<ProtectedRoute />}>
             <Route path="/change-password" element={<ChangePassword />} />
@@ -46,7 +50,8 @@ export default function App() {
               <Route path="/usuarios" element={<Usuarios />} />
               <Route path="/profile" element={<UserProfiles />} />
               <Route path="/calendar" element={<Calendar />} />
-              <Route path="/blank" element={<Blank />} />
+              <Route path="/panel-llamados" element={<PanelLlamados />} />
+              <Route path="/blank" element={<PanelLlamados />} />
               <Route path="/form-elements" element={<FormElements />} />
               <Route path="/basic-tables" element={<BasicTables />} />
               <Route path="/alerts" element={<Alerts />} />

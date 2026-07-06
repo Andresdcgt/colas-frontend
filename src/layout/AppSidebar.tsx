@@ -16,6 +16,7 @@ import {
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "../context/AuthContext";
+import IgssLogo from "../components/common/IgssLogo";
 
 type NavItem = {
   name: string;
@@ -66,7 +67,8 @@ const rootMenuSections: NavSection[] = [
       { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
       { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
       { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
-      { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
+      { icon: <PageIcon />, name: "Panel de llamados", path: "/panel-llamados" },
+      { icon: <PageIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
     ],
   },
   {
@@ -100,7 +102,8 @@ const adminClinicaMenuSections: NavSection[] = [
       { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
       { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
       { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
-      { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
+      { icon: <PageIcon />, name: "Panel de llamados", path: "/panel-llamados" },
+      { icon: <PageIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
     ],
   },
   {
@@ -133,7 +136,8 @@ const adminSucursalMenuSections: NavSection[] = [
       { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
       { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
       { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
-      { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
+      { icon: <PageIcon />, name: "Panel de llamados", path: "/panel-llamados" },
+      { icon: <PageIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
     ],
   },
   {
@@ -166,7 +170,8 @@ const recepcionMenuSections: NavSection[] = [
       { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
       { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
       { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
-      { icon: <PageIcon />, name: "Pantalla de espera", path: "/blank" },
+      { icon: <PageIcon />, name: "Panel de llamados", path: "/panel-llamados" },
+      { icon: <PageIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
     ],
   },
   {
@@ -434,35 +439,17 @@ const AppSidebar: React.FC = () => {
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
-        className={`py-8 flex ${
+        className={`py-6 flex border-b border-gray-100 dark:border-gray-800 ${
           !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
         }`}
       >
-        <Link to="/">
+        <Link to="/" className="block min-w-0" title="IGSS — Inicio">
           {isExpanded || isHovered || isMobileOpen ? (
-            <>
-              <img
-                className="dark:hidden"
-                src="/images/logo/logo.svg"
-                alt="Logo"
-                width={150}
-                height={40}
-              />
-              <img
-                className="hidden dark:block"
-                src="/images/logo/logo-dark.svg"
-                alt="Logo"
-                width={150}
-                height={40}
-              />
-            </>
+            <div className="rounded-xl bg-gray-50 px-3 py-2 ring-1 ring-gray-100 dark:bg-gray-800/60 dark:ring-gray-700">
+              <IgssLogo />
+            </div>
           ) : (
-            <img
-              src="/images/logo/logo-icon.svg"
-              alt="Logo"
-              width={32}
-              height={32}
-            />
+            <IgssLogo variant="compact" />
           )}
         </Link>
       </div>

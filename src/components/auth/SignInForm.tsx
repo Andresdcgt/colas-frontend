@@ -5,6 +5,7 @@ import Label from "../form/Label";
 import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
 import Button from "../ui/button/Button";
+import IgssLogo from "../common/IgssLogo";
 import { useAuth } from "../../context/AuthContext";
 
 export default function SignInForm() {
@@ -38,9 +39,14 @@ export default function SignInForm() {
   };
 
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex flex-col flex-1 lg:w-1/2">
       <div className="flex flex-col justify-center flex-1 w-full max-w-md pt-10 mx-auto">
         <div>
+          <div className="flex justify-center mb-8 lg:hidden">
+            <div className="rounded-2xl bg-gray-50 p-3 ring-1 ring-gray-100 dark:bg-gray-800/50 dark:ring-gray-700">
+              <IgssLogo className="!max-w-[140px]" />
+            </div>
+          </div>
           <div className="mb-5 sm:mb-8">
             <h1 className="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md">
               Iniciar sesión

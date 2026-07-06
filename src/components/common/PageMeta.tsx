@@ -14,7 +14,13 @@ const PageMeta = ({
 );
 
 export const AppWrapper = ({ children }: { children: React.ReactNode }) => (
-  <HelmetProvider>{children}</HelmetProvider>
+  <HelmetProvider>
+    <Helmet>
+      <link rel="icon" type="image/png" href="/LOGO-IGSS-2025.png" />
+      <link rel="apple-touch-icon" href="/LOGO-IGSS-2025.png" />
+    </Helmet>
+    {children}
+  </HelmetProvider>
 );
 
 export default PageMeta;

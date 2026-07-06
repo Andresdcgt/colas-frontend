@@ -387,6 +387,11 @@ export interface Turno {
   numero_turno: string;
   orden: number;
   observaciones: string | null;
+  veces_llamado?: number;
+  ultima_llamada_at?: string | null;
+  reencolado?: boolean;
+  motivo_cancelacion?: string | null;
+  cancelado_at?: string | null;
   paciente_nombre?: string;
   paciente_apellido?: string;
   paciente_dni?: string;
@@ -410,6 +415,97 @@ export async function getTurnos(params: GetTurnosParams): Promise<{ turnos: Turn
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data?.message || "Error al cargar turnos");
+  }
+  return res.json();
+}
+
+export const MAX_LLAMADAS_TURNO = 4;
+
+export async function llamarTurno(id: string): Promise<Turno> {
+  const res = await fetchWithAuth(`/api/turnos/${id}/llamar`, { method: "POST" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || "Error al llamar turno");
+  }
+  return res.json();
+}
+
+export async function reencolarTurno(id: string): Promise<Turno> {
+  const res = await fetchWithAuth(`/api/turnos/${id}/reencolar`, { method: "POST" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || "Error al reencolar turno");
+  }
+  return res.json();
+}
+
+export async function cancelarTurno(id: string, motivo: string): Promise<Turno> {
+  const res = await fetchWithAuth(`/api/turnos/${id}/cancelar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ motivo: motivo.trim() }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || "Error al cancelar turno");
+  }
+  return res.json();
+}
+
+export async function recuperarTurno(id: string): Promise<Turno> {
+  const res = await fetchWithAuth(`/api/turnos/${id}/recuperar`, { method: "POST" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || "Error al recuperar turno");
+  }
+  return res.json();
+}
+
+export async function marcarNoAsistio(id: string, nota: string): Promise<Turno> {
+  const res = await fetchWithAuth(`/api/turnos/${id}/marcar-no-asistio`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nota: nota.trim() }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || "Error al registrar no asistió");
+  }
+  return res.json();
+}
+
+export interface PantallaPublicaTurno {
+  numero_turno: string;
+  estado: string;
+  veces_llamado: number;
+  ultima_llamada_at: string | null;
+  consultorio_nombre: string;
+  consultorio_id: string;
+}
+
+export interface PantallaPublicaResumen {
+  consultorio_nombre: string;
+  pendientes: number;
+}
+
+export interface PantallaPublicaResponse {
+  tenant_name: string;
+  fecha: string;
+  llamados: PantallaPublicaTurno[];
+  en_atencion: PantallaPublicaTurno[];
+  resumen_consultorios: PantallaPublicaResumen[];
+}
+
+export async function getPantallaPublica(
+  tenantSlug: string,
+  fecha?: string
+): Promise<PantallaPublicaResponse> {
+  const q = new URLSearchParams({ tenant_slug: tenantSlug });
+  if (fecha) q.set("fecha", fecha);
+  const res = await fetch(getApiUrl(`/api/turnos/pantalla-publica?${q.toString()}`));
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || "Error al cargar pantalla pública");
   }
   return res.json();
 }
