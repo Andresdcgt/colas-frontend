@@ -23,8 +23,8 @@ export default function IgssConsultaLoader({ pacienteNombre, compact }: Props) {
       </p>
       <p className="mt-1 max-w-xs text-center text-xs text-gray-500 dark:text-gray-400">
         {pacienteNombre
-          ? `Verificando derecho a atención de ${pacienteNombre}`
-          : "Verificando derecho a atención médica según estatutos IGSS"}
+          ? `Verificando si ${pacienteNombre} esta al dia`
+          : "Verificando si el paciente esta al dia segun estatutos IGSS"}
       </p>
       <div className="mt-3 flex gap-1">
         {[0, 1, 2].map((i) => (

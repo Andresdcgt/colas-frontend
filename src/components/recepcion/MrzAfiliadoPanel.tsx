@@ -18,6 +18,7 @@ type Props = {
   disabled?: boolean;
   tenantId?: string;
   showInlineResult?: boolean;
+  embedded?: boolean;
   onPacienteSelected: (paciente: Paciente, afiliacion: AfiliacionIgssResult) => void;
   onClear: () => void;
 };
@@ -28,6 +29,7 @@ export default function MrzAfiliadoPanel({
   disabled,
   tenantId,
   showInlineResult = true,
+  embedded = false,
   onPacienteSelected,
   onClear,
 }: Props) {
@@ -125,7 +127,7 @@ export default function MrzAfiliadoPanel({
       e.preventDefault();
       const mrz = parseMrz(mrzBuffer);
       if (!mrz) {
-        setError("No se pudo leer el MRZ. Verificá el documento o ingresá el CUI manualmente.");
+        setError("No se pudo leer el MRZ. Verifica el documento o ingresa el CUI manualmente.");
         setStep("error");
         return;
       }
@@ -137,7 +139,7 @@ export default function MrzAfiliadoPanel({
   const validarCuiManual = async () => {
     const cui = cuiManual.replace(/\D/g, "");
     if (cui.length < 8) {
-      setError("Ingresá un CUI/DPI válido (mínimo 8 dígitos).");
+      setError("Ingresa un CUI/DPI valido (minimo 8 digitos).");
       setStep("error");
       return;
     }
@@ -164,20 +166,28 @@ export default function MrzAfiliadoPanel({
   const showResult = step === "ready" && paciente && afiliacion;
 
   return (
-    <div className="rounded-xl border border-brand-200 bg-gradient-to-br from-brand-50/60 to-white p-4 dark:border-brand-800 dark:from-brand-500/5 dark:to-gray-900">
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div>
-          <Label>Lector MRZ — afiliación IGSS</Label>
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-            Escaneá DPI o pasaporte. Se valida derecho a atención según estatutos IGSS.
-          </p>
+    <div
+      className={
+        embedded
+          ? ""
+          : "rounded-xl border border-brand-200 bg-gradient-to-br from-brand-50/60 to-white p-4 dark:border-brand-800 dark:from-brand-500/5 dark:to-gray-900"
+      }
+    >
+      {!embedded && (
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div>
+            <Label>Lector MRZ — afiliación IGSS</Label>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+              Escanea DPI o pasaporte. Se verifica si el paciente esta al dia segun estatutos IGSS.
+            </p>
+          </div>
+          {afiliacion?.fuente === "mock" && (
+            <Badge color="light" size="sm" variant="light">
+              Modo simulación
+            </Badge>
+          )}
         </div>
-        {afiliacion?.fuente === "mock" && (
-          <Badge color="light" size="sm" variant="light">
-            Modo simulación
-          </Badge>
-        )}
-      </div>
+      )}
 
       {step === "validating" && (
         <IgssConsultaLoader
@@ -209,7 +219,7 @@ export default function MrzAfiliadoPanel({
                 }
               }}
               disabled={disabled}
-              placeholder="Enfocá aquí y escaneá el documento…"
+              placeholder="Enfoca aqui y escanea el documento…"
               autoComplete="off"
               spellCheck={false}
               className="h-11 w-full rounded-lg border border-brand-300 bg-white px-3 font-mono text-sm tracking-wide dark:border-brand-700 dark:bg-gray-900 dark:text-white"
@@ -255,7 +265,7 @@ export default function MrzAfiliadoPanel({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge color="success" size="sm" variant="light">
-                  Derecho a atención
+                  Paciente al Dia
                 </Badge>
                 {afiliacion.tipo_afiliacion && (
                   <span className="text-xs text-gray-600 dark:text-gray-400">
@@ -286,7 +296,7 @@ export default function MrzAfiliadoPanel({
         </div>
       )}
 
-      {!showResult && step !== "error" && (
+      {!showResult && step !== "error" && !embedded && (
         <p className="mt-3 text-[11px] text-gray-400">
           Tip dev: CUI terminado en 0 = no afiliado · en 1 = moroso · otro = elegible (simulación).
         </p>

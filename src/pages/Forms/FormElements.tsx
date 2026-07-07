@@ -86,6 +86,55 @@ function groupConsultorios(consultorios: Consultorio[]): Map<string, Consultorio
   return map;
 }
 
+type PacienteTab = "mrz" | "lista";
+
+function FormSection({
+  step,
+  title,
+  description,
+  children,
+}: {
+  step: number;
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-white/[0.02]">
+      <header className="flex items-center gap-3 border-b border-gray-200/80 bg-white px-4 py-3 dark:border-gray-800 dark:bg-white/[0.03]">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
+          {step}
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
+          {description && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
+          )}
+        </div>
+      </header>
+      <div className="p-4">{children}</div>
+    </section>
+  );
+}
+
+function StepCheck({ done, label }: { done: boolean; label: string }) {
+  return (
+    <li className={`flex items-center gap-2 text-xs ${done ? "text-success-700 dark:text-success-400" : "text-gray-400"}`}>
+      <span
+        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+          done ? "bg-success-500 text-white" : "border border-gray-300 dark:border-gray-600"
+        }`}
+      >
+        {done ? "✓" : ""}
+      </span>
+      {label}
+    </li>
+  );
+}
+
+const selectClass =
+  "h-11 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
+
 export default function FormElements() {
   const { user } = useAuth();
   const isRoot = user?.role === "root";
@@ -122,6 +171,7 @@ export default function FormElements() {
   const [recuperandoId, setRecuperandoId] = useState<string | null>(null);
   const [afiliacion, setAfiliacion] = useState<AfiliacionIgssResult | null>(null);
   const [validandoPacienteId, setValidandoPacienteId] = useState<string | null>(null);
+  const [pacienteTab, setPacienteTab] = useState<PacienteTab>("lista");
 
   const consultoriosAgrupados = useMemo(() => groupConsultorios(consultorios), [consultorios]);
 
@@ -206,6 +256,11 @@ export default function FormElements() {
 
   const selectedConsultorio = consultorios.find((c) => c.id === form.consultorio_id);
 
+  const puedeAsignar =
+    !!form.consultorio_id && !!form.paciente_id && !!afiliacion?.elegible && !submitting;
+
+  const validandoPaciente = pacientes.find((p) => p.id === validandoPacienteId) ?? null;
+
   const setFechaRapida = (offset: number) => {
     const d = new Date();
     d.setDate(d.getDate() + offset);
@@ -220,7 +275,7 @@ export default function FormElements() {
       return;
     }
     if (!afiliacion?.elegible) {
-      setError("Validá la afiliación IGSS con el lector MRZ o CUI antes de asignar turno.");
+      setError("Valida con el lector MRZ o selecciona un paciente para verificar que este al dia en IGSS.");
       return;
     }
     setSubmitting(true);
@@ -398,148 +453,198 @@ export default function FormElements() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageMeta title="Nuevo turno | Colas Turnos" description="Recepción — asignar y consultar turnos" />
       <PageBreadcrumb pageTitle="Nuevo turno" />
 
-      {/* Encabezado con fecha y resumen */}
-      <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-brand-50/80 to-white p-5 dark:border-gray-800 dark:from-brand-500/10 dark:to-gray-900">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Recepción — turnos del día
-            </h1>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              Asigna turnos con lectura MRZ y validación de afiliación IGSS.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setFechaRapida(-1)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-            >
-              Ayer
-            </button>
-            <button
-              type="button"
-              onClick={() => setFechaRapida(0)}
-              className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 dark:border-brand-800 dark:bg-brand-500/15 dark:text-brand-400"
-            >
-              Hoy
-            </button>
-            <button
-              type="button"
-              onClick={() => setFechaRapida(1)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-            >
-              Mañana
-            </button>
-            <input
-              type="date"
-              value={form.fecha}
-              onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))}
-              className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-            />
-          </div>
+      {/* Barra superior compacta */}
+      <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03] lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Recepción</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {formatFechaLabel(form.fecha)}
+            {selectedConsultorio ? ` · ${selectedConsultorio.nombre}` : " · Sin consultorio"}
+          </p>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="flex flex-wrap items-center gap-2">
           {[
-            { label: "En cola", value: stats.enCola, color: "text-blue-600 dark:text-blue-400" },
-            { label: "Atendidos", value: stats.finalizados, color: "text-green-600 dark:text-green-400" },
-            { label: "Cancelados", value: stats.cancelados, color: "text-red-600 dark:text-red-400" },
-            { label: "Total día", value: stats.total, color: "text-gray-800 dark:text-gray-200" },
+            { label: "En cola", value: stats.enCola, active: "text-blue-600 dark:text-blue-400" },
+            { label: "Atendidos", value: stats.finalizados, active: "text-green-600 dark:text-green-400" },
+            { label: "Cancelados", value: stats.cancelados, active: "text-red-500 dark:text-red-400" },
           ].map((s) => (
             <div
               key={s.label}
-              className="rounded-xl border border-gray-100 bg-white/80 px-4 py-3 dark:border-gray-800 dark:bg-white/[0.03]"
+              className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-900/50"
             >
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{s.label}</p>
-              <p className={`mt-0.5 text-2xl font-bold tabular-nums ${s.color}`}>{s.value}</p>
+              <span className="text-xs text-gray-500">{s.label}</span>
+              <span className={`text-sm font-bold tabular-nums ${s.active}`}>{s.value}</span>
             </div>
           ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { label: "Ayer", offset: -1 },
+            { label: "Hoy", offset: 0, primary: true },
+            { label: "Mañana", offset: 1 },
+          ].map((d) => (
+            <button
+              key={d.label}
+              type="button"
+              onClick={() => setFechaRapida(d.offset)}
+              className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                d.primary
+                  ? "bg-brand-500 font-medium text-white hover:bg-brand-600"
+                  : "border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              }`}
+            >
+              {d.label}
+            </button>
+          ))}
+          <input
+            type="date"
+            value={form.fecha}
+            onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))}
+            className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+          />
         </div>
       </div>
 
       {error && (
         <div
-          className="rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-400"
+          className="flex items-start justify-between gap-3 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-400"
           role="alert"
         >
-          {error}
-          <button
-            type="button"
-            className="ml-2 underline"
-            onClick={() => setError("")}
-          >
+          <span>{error}</span>
+          <button type="button" className="shrink-0 underline" onClick={() => setError("")}>
             Cerrar
           </button>
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-5">
-        {/* Formulario */}
-        <div className="xl:col-span-2">
-          <ComponentCard title="Nuevo turno">
-            <form onSubmit={handleSubmit} className="space-y-5">
+      {createdTurno && pacienteParaEnvio && (
+        <div className="rounded-2xl border border-success-200 bg-success-50/90 p-4 dark:border-success-800 dark:bg-success-500/10">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-success-500 text-xl font-bold text-white">
+                {createdTurno.numero_turno}
+              </span>
               <div>
-                <Label>Consultorio</Label>
-                <select
-                  value={form.consultorio_id}
-                  onChange={(e) => setForm((f) => ({ ...f, consultorio_id: e.target.value }))}
-                  className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                >
-                  <option value="">Selecciona consultorio</option>
-                  {Array.from(consultoriosAgrupados.entries()).map(([sede, lista]) => (
-                    <optgroup key={sede} label={sede}>
-                      {lista.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.nombre}
-                          {c.medico_nombre ? ` — ${c.medico_nombre}` : ""}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-                {consultorios.length === 0 && (
-                  <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-                    No hay consultorios. Créalos en Sucursales → Consultorios.
+                <p className="font-semibold text-success-800 dark:text-success-300">Turno asignado</p>
+                <p className="mt-0.5 text-sm text-success-700/90 dark:text-success-400/90">
+                  {pacienteParaEnvio.apellido}, {pacienteParaEnvio.nombre} · {formatHora(createdTurno.hora)}
+                  {selectedConsultorio && ` · ${selectedConsultorio.nombre}`}
+                </p>
+                {(pacienteParaEnvio.email || pacienteParaEnvio.telefono) && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {pacienteParaEnvio.email && (
+                      <Button size="sm" variant="outline" disabled={!!enviando} onClick={() => handleEnviar("email")}>
+                        {enviando === "email" ? "Enviando…" : "Correo"}
+                      </Button>
+                    )}
+                    {pacienteParaEnvio.telefono && (
+                      <Button size="sm" variant="outline" disabled={!!enviando} onClick={() => handleEnviar("sms")}>
+                        {enviando === "sms" ? "Enviando…" : "SMS"}
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {enviadoMsg && (
+                  <p className={`mt-2 text-sm ${enviadoMsg.ok ? "text-success-700" : "text-amber-700"}`}>
+                    {enviadoMsg.texto}
                   </p>
                 )}
               </div>
+            </div>
+            <button
+              type="button"
+              onClick={cerrarExito}
+              className="text-sm font-medium text-success-800 underline dark:text-success-400"
+            >
+              Siguiente turno
+            </button>
+          </div>
+        </div>
+      )}
 
-              <MrzAfiliadoPanel
-                key="mrz-scan"
-                disabled={submitting}
-                tenantId={selectedConsultorio?.tenant_id}
-                showInlineResult={false}
-                onPacienteSelected={handlePacienteMrz}
-                onClear={limpiarPaciente}
-              />
+      <div className="grid gap-5 xl:grid-cols-12">
+        {/* Panel izquierdo — asignación */}
+        <div className="xl:col-span-5 xl:sticky xl:top-4 xl:self-start">
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
+            <div className="border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Asignar turno</h2>
+              <p className="mt-0.5 text-xs text-gray-500">Completa los 3 pasos en orden</p>
+            </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
+            <form onSubmit={handleSubmit} className="space-y-4 p-4">
+              <FormSection step={1} title="Destino" description="Consultorio y horario del turno">
+                <div className="space-y-3">
                   <div>
-                    <Label>Pacientes registrados</Label>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                      Seleccioná uno para pruebas mientras se integra la API IGSS.
-                    </p>
+                    <Label>Consultorio</Label>
+                    <select
+                      value={form.consultorio_id}
+                      onChange={(e) => setForm((f) => ({ ...f, consultorio_id: e.target.value }))}
+                      className={selectClass}
+                    >
+                      <option value="">Selecciona consultorio</option>
+                      {Array.from(consultoriosAgrupados.entries()).map(([sede, lista]) => (
+                        <optgroup key={sede} label={sede}>
+                          {lista.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.nombre}
+                              {c.medico_nombre ? ` — ${c.medico_nombre}` : ""}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                    {consultorios.length === 0 && (
+                      <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
+                        No hay consultorios.{" "}
+                        <Link to="/consultorios" className="underline">
+                          Crear en Consultorios
+                        </Link>
+                      </p>
+                    )}
                   </div>
-                  <Link
-                    to="/basic-tables"
-                    className="shrink-0 text-xs font-medium text-brand-500 hover:underline"
-                  >
-                    + Nuevo paciente
-                  </Link>
-                </div>
-
-                {selectedPaciente && afiliacion?.elegible && (
-                  <div className="flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50/50 px-4 py-3 dark:border-brand-800 dark:bg-brand-500/10">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
+                      <Label>Hora</Label>
+                      <Input
+                        type="time"
+                        value={form.hora}
+                        onChange={(e) => setForm((f) => ({ ...f, hora: e.target.value }))}
+                        disabled={submitting}
+                      />
+                    </div>
+                    <div>
+                      <Label>Prioridad</Label>
+                      <select
+                        value={form.prioridad}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            prioridad: e.target.value as "normal" | "urgencia",
+                          }))
+                        }
+                        className={selectClass}
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="urgencia">Urgencia</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </FormSection>
+
+              <FormSection step={2} title="Paciente" description="Escanear documento o buscar en el registro">
+                {selectedPaciente && afiliacion?.elegible ? (
+                  <div className="mb-4 flex items-center justify-between rounded-xl border border-success-200 bg-success-50/60 px-4 py-3 dark:border-success-800 dark:bg-success-500/10">
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge color="success" size="sm" variant="light">
-                          Derecho a atención
+                          Paciente al Dia
                         </Badge>
                         {afiliacion.fuente === "mock" && (
                           <Badge color="light" size="sm" variant="light">
@@ -547,7 +652,7 @@ export default function FormElements() {
                           </Badge>
                         )}
                       </div>
-                      <p className="mt-1 font-medium text-gray-900 dark:text-white">
+                      <p className="mt-1 truncate font-medium text-gray-900 dark:text-white">
                         {selectedPaciente.apellido}, {selectedPaciente.nombre}
                       </p>
                       <p className="text-xs text-gray-500">
@@ -558,210 +663,154 @@ export default function FormElements() {
                     <button
                       type="button"
                       onClick={limpiarPaciente}
-                      className="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-300"
+                      className="ml-2 shrink-0 text-xs font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-300"
                     >
                       Cambiar
                     </button>
                   </div>
-                )}
+                ) : null}
+
+                <div className="mb-3 flex rounded-lg border border-gray-200 bg-gray-100/80 p-1 dark:border-gray-700 dark:bg-gray-900/50">
+                  {(
+                    [
+                      { id: "mrz" as const, label: "Escanear MRZ" },
+                      { id: "lista" as const, label: "Buscar paciente" },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setPacienteTab(tab.id)}
+                      className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition ${
+                        pacienteTab === tab.id
+                          ? "bg-white text-brand-700 shadow-sm dark:bg-gray-800 dark:text-brand-400"
+                          : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
 
                 {validandoPacienteId ? (
                   <IgssConsultaLoader
-                    pacienteNombre={(() => {
-                      const p = pacientes.find((x) => x.id === validandoPacienteId);
-                      return p ? `${p.apellido}, ${p.nombre}` : undefined;
-                    })()}
+                    compact
+                    pacienteNombre={
+                      validandoPaciente
+                        ? `${validandoPaciente.apellido}, ${validandoPaciente.nombre}`
+                        : undefined
+                    }
+                  />
+                ) : pacienteTab === "mrz" ? (
+                  <MrzAfiliadoPanel
+                    key="mrz-scan"
+                    embedded
+                    disabled={submitting}
+                    tenantId={selectedConsultorio?.tenant_id}
+                    showInlineResult={false}
+                    onPacienteSelected={handlePacienteMrz}
+                    onClear={limpiarPaciente}
                   />
                 ) : (
-                  <>
-                    <Input
-                      value={pacienteSearch}
-                      onChange={(e) => setPacienteSearch(e.target.value)}
-                      placeholder="Buscar por nombre o CUI…"
-                      disabled={submitting}
-                    />
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <Input
+                        value={pacienteSearch}
+                        onChange={(e) => setPacienteSearch(e.target.value)}
+                        placeholder="Nombre o CUI…"
+                        disabled={submitting}
+                      />
+                      <Link
+                        to="/basic-tables"
+                        className="shrink-0 text-xs font-medium text-brand-500 hover:underline"
+                      >
+                        + Nuevo
+                      </Link>
+                    </div>
                     {pacientes.length === 0 ? (
-                      <p className="text-xs text-gray-500">
-                        No hay pacientes registrados.{" "}
+                      <p className="py-6 text-center text-xs text-gray-500">
+                        Sin pacientes registrados.{" "}
                         <Link to="/basic-tables" className="text-brand-500 hover:underline">
                           Crear uno
                         </Link>
                       </p>
                     ) : filteredPacientes.length > 0 ? (
-                      <ul className="max-h-52 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                      <ul className="max-h-48 divide-y divide-gray-100 overflow-y-auto rounded-xl border border-gray-200 dark:divide-gray-800 dark:border-gray-700">
                         {filteredPacientes.map((p) => {
                           const seleccionado = form.paciente_id === p.id && afiliacion?.elegible;
                           return (
                             <li key={p.id}>
                               <button
                                 type="button"
-                                disabled={!!validandoPacienteId || submitting}
+                                disabled={submitting}
                                 onClick={() => void seleccionarPacienteManual(p)}
-                                className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition hover:bg-gray-50 disabled:opacity-50 dark:hover:bg-white/5 ${
-                                  seleccionado
-                                    ? "border-l-2 border-brand-500 bg-brand-50/40 dark:bg-brand-500/10"
-                                    : ""
+                                className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-white/5 ${
+                                  seleccionado ? "bg-brand-50/50 dark:bg-brand-500/10" : ""
                                 }`}
                               >
-                                <span className="font-medium text-gray-800 dark:text-gray-200">
+                                <span className="min-w-0 truncate font-medium text-gray-800 dark:text-gray-200">
                                   {p.apellido}, {p.nombre}
                                 </span>
-                                <span className="text-xs text-gray-500">{p.dni}</span>
+                                <span className="shrink-0 font-mono text-xs text-gray-400">{p.dni}</span>
                               </button>
                             </li>
                           );
                         })}
                       </ul>
-                    ) : pacienteSearch.trim() ? (
-                      <p className="text-xs text-gray-500">Sin resultados para &quot;{pacienteSearch}&quot;</p>
-                    ) : null}
-                    <p className="text-[11px] text-gray-400">
-                      Al seleccionar se consulta derecho a atención en IGSS. Tip: CUI terminado en 0 = no afiliado ·
-                      en 1 = moroso · otro = elegible.
-                    </p>
-                  </>
+                    ) : (
+                      <p className="py-4 text-center text-xs text-gray-500">
+                        Sin resultados para &quot;{pacienteSearch}&quot;
+                      </p>
+                    )}
+                  </div>
                 )}
-              </div>
+              </FormSection>
 
-              <div className="grid grid-cols-2 gap-3">
+              <FormSection step={3} title="Detalles" description="Opcional">
                 <div>
-                  <Label>Hora</Label>
+                  <Label>Observaciones</Label>
                   <Input
-                    type="time"
-                    value={form.hora}
-                    onChange={(e) => setForm((f) => ({ ...f, hora: e.target.value }))}
+                    value={form.observaciones}
+                    onChange={(e) => setForm((f) => ({ ...f, observaciones: e.target.value }))}
+                    placeholder="Ej. control, derivación…"
                     disabled={submitting}
                   />
                 </div>
-                <div>
-                  <Label>Prioridad</Label>
-                  <select
-                    value={form.prioridad}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        prioridad: e.target.value as "normal" | "urgencia",
-                      }))
-                    }
-                    className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                  >
-                    <option value="normal">Normal</option>
-                    <option value="urgencia">Urgencia</option>
-                  </select>
-                </div>
-              </div>
+              </FormSection>
 
-              <div>
-                <Label>Observaciones (opcional)</Label>
-                <Input
-                  value={form.observaciones}
-                  onChange={(e) => setForm((f) => ({ ...f, observaciones: e.target.value }))}
-                  placeholder="Ej. control de embarazo, derivación…"
-                  disabled={submitting}
-                />
+              <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/30">
+                <ul className="mb-4 space-y-1.5">
+                  <StepCheck done={!!form.consultorio_id} label="Consultorio seleccionado" />
+                  <StepCheck
+                    done={!!form.paciente_id && !!afiliacion?.elegible}
+                    label="Paciente validado (al dia)"
+                  />
+                </ul>
+                <button
+                  type="submit"
+                  disabled={!puedeAsignar}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-5 py-3.5 text-sm font-semibold text-white shadow-theme-xs transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {submitting ? "Asignando turno…" : "Asignar turno a la cola"}
+                </button>
               </div>
-
-              <button
-                type="submit"
-                disabled={
-                  submitting ||
-                  !form.consultorio_id ||
-                  !form.paciente_id ||
-                  !afiliacion?.elegible
-                }
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-5 py-3.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submitting ? "Asignando turno…" : "Asignar turno"}
-              </button>
             </form>
-          </ComponentCard>
-
-          {createdTurno && pacienteParaEnvio && (
-            <div className="mt-4 rounded-2xl border border-success-200 bg-success-50/80 p-5 dark:border-success-800 dark:bg-success-500/10">
-              <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success-500 text-lg font-bold text-white">
-                  {createdTurno.numero_turno}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-success-800 dark:text-success-300">
-                    Turno asignado correctamente
-                  </p>
-                  <p className="mt-1 text-sm text-success-700/90 dark:text-success-400/90">
-                    {pacienteParaEnvio.apellido}, {pacienteParaEnvio.nombre} ·{" "}
-                    {formatFechaLabel(form.fecha)} {formatHora(createdTurno.hora)}
-                    {selectedConsultorio && ` · ${selectedConsultorio.nombre}`}
-                  </p>
-                  {(pacienteParaEnvio.email || pacienteParaEnvio.telefono) && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {pacienteParaEnvio.email && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={!!enviando}
-                          onClick={() => handleEnviar("email")}
-                        >
-                          {enviando === "email" ? "Enviando…" : "Correo"}
-                        </Button>
-                      )}
-                      {pacienteParaEnvio.telefono && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={!!enviando}
-                          onClick={() => handleEnviar("sms")}
-                        >
-                          {enviando === "sms" ? "Enviando…" : "SMS"}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {enviadoMsg && (
-                    <p
-                      className={`mt-2 text-sm ${enviadoMsg.ok ? "text-success-700" : "text-amber-700"}`}
-                    >
-                      {enviadoMsg.texto}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={cerrarExito}
-                    className="mt-3 text-sm font-medium text-success-800 underline dark:text-success-400"
-                  >
-                    Listo, siguiente turno
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
 
-        {/* Lista de turnos */}
-        <div className="xl:col-span-3">
-          <ComponentCard
-            title={`Turnos — ${formatFechaLabel(form.fecha)}`}
-            desc={
-              selectedConsultorio && soloConsultorio
-                ? `${selectedConsultorio.nombre}${selectedConsultorio.sucursal_nombre ? ` · ${selectedConsultorio.sucursal_nombre}` : ""}`
-                : "Todos los consultorios"
-            }
-          >
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap gap-1.5">
-                {filtros.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setListaFiltro(f.id)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                      listaFiltro === f.id
-                        ? "bg-brand-500 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
-                    }`}
-                  >
-                    {f.label}
-                    <span className="ml-1 opacity-80">({f.count})</span>
-                  </button>
-                ))}
+        {/* Panel derecho — cola */}
+        <div className="xl:col-span-7">
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
+            <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                  Cola del dia
+                </h2>
+                <p className="text-xs text-gray-500">
+                  {soloConsultorio && selectedConsultorio
+                    ? `${selectedConsultorio.nombre}${selectedConsultorio.sucursal_nombre ? ` · ${selectedConsultorio.sucursal_nombre}` : ""}`
+                    : "Todos los consultorios"}
+                </p>
               </div>
               <label className="flex cursor-pointer items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                 <input
@@ -775,73 +824,94 @@ export default function FormElements() {
               </label>
             </div>
 
-            {loadingTurnos ? (
-              <p className="py-12 text-center text-sm text-gray-500">Actualizando cola…</p>
-            ) : turnosFiltrados.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-                  <span className="text-2xl text-gray-400">—</span>
+            <div className="flex flex-wrap gap-1.5 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+              {filtros.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setListaFiltro(f.id)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                    listaFiltro === f.id
+                      ? "bg-brand-500 text-white shadow-sm"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  {f.label}
+                  <span className="ml-1 opacity-80">({f.count})</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="p-4">
+              {loadingTurnos ? (
+                <div className="flex flex-col items-center justify-center py-16 text-sm text-gray-500">
+                  <div className="mb-3 h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-brand-500" />
+                  Actualizando cola…
                 </div>
-                <p className="font-medium text-gray-700 dark:text-gray-300">
-                  {listaFiltro === "activos"
-                    ? "No hay pacientes en cola"
-                    : "No hay turnos en esta categoría"}
-                </p>
-                <p className="mt-1 max-w-xs text-sm text-gray-500">
-                  {stats.total === 0
-                    ? "Aún no se han registrado turnos para esta fecha."
-                    : "Prueba otro filtro o cambia la fecha."}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableCell isHeader>#</TableCell>
-                      <TableCell isHeader>Paciente</TableCell>
-                      <TableCell isHeader>Hora</TableCell>
-                      <TableCell isHeader>Consultorio</TableCell>
-                      <TableCell isHeader>Estado</TableCell>
-                      <TableCell isHeader className="text-right">Acciones</TableCell>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {turnosFiltrados.map((t) => (
-                      <TableRow
-                        key={t.id}
-                        className={
-                          t.id === createdTurno?.id
-                            ? "bg-success-50/50 dark:bg-success-500/5"
-                            : undefined
-                        }
-                      >
-                        <TableCell>
-                          <span className="font-mono text-sm font-bold text-brand-600 dark:text-brand-400">
-                            {t.numero_turno}
-                          </span>
-                          {t.prioridad === "urgencia" && (
-                            <Badge color="error" size="sm" variant="light">
-                              URG
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <p className="font-medium text-gray-800 dark:text-gray-200">
-                            {t.paciente_apellido}, {t.paciente_nombre}
-                          </p>
-                          {t.paciente_dni && (
-                            <p className="text-xs text-gray-500">DNI {t.paciente_dni}</p>
-                          )}
-                        </TableCell>
-                        <TableCell className="tabular-nums text-gray-600 dark:text-gray-400">
-                          {formatHora(t.hora)}
-                        </TableCell>
-                        <TableCell className="text-sm text-gray-600 dark:text-gray-400">
-                          {t.consultorio_nombre ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
+              ) : turnosFiltrados.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800">
+                    <svg className="h-7 w-7 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <p className="font-medium text-gray-700 dark:text-gray-300">
+                    {listaFiltro === "activos" ? "Cola vacía" : "Sin turnos en este filtro"}
+                  </p>
+                  <p className="mt-1 max-w-xs text-sm text-gray-500">
+                    {stats.total === 0
+                      ? "Aún no hay turnos para esta fecha."
+                      : "Prueba otro filtro o cambia la fecha."}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-gray-100 dark:border-gray-800">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableCell isHeader className="w-16">#</TableCell>
+                        <TableCell isHeader>Paciente</TableCell>
+                        <TableCell isHeader className="w-20">Hora</TableCell>
+                        <TableCell isHeader>Consultorio</TableCell>
+                        <TableCell isHeader className="w-28">Estado</TableCell>
+                        <TableCell isHeader className="w-24 text-right">Acciones</TableCell>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {turnosFiltrados.map((t) => (
+                        <TableRow
+                          key={t.id}
+                          className={
+                            t.id === createdTurno?.id
+                              ? "bg-success-50/50 dark:bg-success-500/5"
+                              : undefined
+                          }
+                        >
+                          <TableCell>
+                            <span className="font-mono text-sm font-bold text-brand-600 dark:text-brand-400">
+                              {t.numero_turno}
+                            </span>
+                            {t.prioridad === "urgencia" && (
+                              <Badge color="error" size="sm" variant="light">
+                                URG
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <p className="font-medium text-gray-800 dark:text-gray-200">
+                              {t.paciente_apellido}, {t.paciente_nombre}
+                            </p>
+                            {t.paciente_dni && (
+                              <p className="text-xs text-gray-500">{t.paciente_dni}</p>
+                            )}
+                          </TableCell>
+                          <TableCell className="tabular-nums text-gray-600 dark:text-gray-400">
+                            {formatHora(t.hora)}
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-600 dark:text-gray-400">
+                            {t.consultorio_nombre ?? "—"}
+                          </TableCell>
+                          <TableCell>
                             <Badge
                               color={ESTADO_COLOR[t.estado] ?? "light"}
                               size="sm"
@@ -850,55 +920,57 @@ export default function FormElements() {
                               {ESTADO_LABEL[t.estado] ?? t.estado}
                             </Badge>
                             {t.motivo_cancelacion && (
-                              <p className="max-w-[200px] text-xs text-gray-500 dark:text-gray-400" title={t.motivo_cancelacion}>
+                              <p
+                                className="mt-0.5 max-w-[140px] truncate text-[10px] text-gray-400"
+                                title={t.motivo_cancelacion}
+                              >
                                 {t.motivo_cancelacion}
                               </p>
                             )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex flex-col items-end gap-1">
-                            {CANCELABLES.has(t.estado) && (
-                              <>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex flex-col items-end gap-0.5">
+                              {CANCELABLES.has(t.estado) && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setTurnoATrasladar(t)}
+                                    className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+                                  >
+                                    Trasladar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => abrirCancelar(t)}
+                                    className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </>
+                              )}
+                              {t.estado === "cancelado" && (
                                 <button
                                   type="button"
-                                  onClick={() => setTurnoATrasladar(t)}
-                                  className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                                  disabled={recuperandoId === t.id}
+                                  onClick={() => void handleRecuperar(t)}
+                                  className="text-xs font-medium text-brand-600 hover:underline disabled:opacity-50 dark:text-brand-400"
                                 >
-                                  Trasladar
+                                  {recuperandoId === t.id ? "…" : "Recuperar"}
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => abrirCancelar(t)}
-                                  className="text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                                >
-                                  Cancelar
-                                </button>
-                              </>
-                            )}
-                            {t.estado === "cancelado" && (
-                              <button
-                                type="button"
-                                disabled={recuperandoId === t.id}
-                                onClick={() => void handleRecuperar(t)}
-                                className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50 dark:text-brand-400"
-                              >
-                                {recuperandoId === t.id ? "Recuperando…" : "Recuperar a cola"}
-                              </button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-
-            <p className="mt-4 text-xs text-gray-400 dark:text-gray-500">
-              La cola se actualiza automáticamente cuando hay cambios en recepción o consultorio.
-            </p>
-          </ComponentCard>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              <p className="mt-3 text-center text-[11px] text-gray-400">
+                Actualización automática en tiempo real
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 

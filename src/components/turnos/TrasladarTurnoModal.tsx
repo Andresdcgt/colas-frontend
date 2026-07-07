@@ -97,7 +97,7 @@ export default function TrasladarTurnoModal({ turno, fecha, onClose, onSuccess }
               onChange={(e) => setConsultorioId(e.target.value)}
               disabled={loading || loadingList}
             >
-              <option value="">Seleccioná un consultorio</option>
+              <option value="">Selecciona un consultorio</option>
               {opciones.map((c) => (
                 <option key={c.consultorio_id} value={c.consultorio_id}>
                   {c.consultorio_nombre}
