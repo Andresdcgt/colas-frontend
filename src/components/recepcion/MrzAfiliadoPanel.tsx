@@ -12,10 +12,12 @@ import {
 } from "../../lib/api";
 import { isMrzComplete, parseMrz } from "../../lib/mrz/parser";
 import type { MrzParsed } from "../../lib/mrz/types";
+import IgssConsultaLoader, { conEsperaIgss } from "./IgssConsultaLoader";
 
 type Props = {
   disabled?: boolean;
   tenantId?: string;
+  showInlineResult?: boolean;
   onPacienteSelected: (paciente: Paciente, afiliacion: AfiliacionIgssResult) => void;
   onClear: () => void;
 };
@@ -25,6 +27,7 @@ type Step = "idle" | "validating" | "ready" | "error";
 export default function MrzAfiliadoPanel({
   disabled,
   tenantId,
+  showInlineResult = true,
   onPacienteSelected,
   onClear,
 }: Props) {
@@ -56,12 +59,14 @@ export default function MrzAfiliadoPanel({
       setError("");
 
       try {
-        const resultado = await validarAfiliacionIgss({
-          cui: mrz.cui,
-          nombre: mrz.nombre,
-          apellido: mrz.apellido,
-          fecha_nacimiento: mrz.fechaNacimiento ?? undefined,
-        });
+        const resultado = await conEsperaIgss(
+          validarAfiliacionIgss({
+            cui: mrz.cui,
+            nombre: mrz.nombre,
+            apellido: mrz.apellido,
+            fecha_nacimiento: mrz.fechaNacimiento ?? undefined,
+          })
+        );
         setAfiliacion(resultado);
 
         if (!resultado.elegible) {
@@ -83,15 +88,25 @@ export default function MrzAfiliadoPanel({
           });
         }
 
-        setPaciente(encontrado);
-        setStep("ready");
         onPacienteSelected(encontrado, resultado);
+
+        if (showInlineResult) {
+          setPaciente(encontrado);
+          setStep("ready");
+        } else {
+          setMrzBuffer("");
+          setCuiManual("");
+          setStep("idle");
+          setParsed(null);
+          setAfiliacion(null);
+          setPaciente(null);
+        }
       } catch (e) {
         setStep("error");
         setError(e instanceof Error ? e.message : "Error al procesar documento");
       }
     },
-    [onPacienteSelected, tenantId]
+    [onPacienteSelected, showInlineResult, tenantId]
   );
 
   const handleMrzInput = (value: string) => {
@@ -164,7 +179,20 @@ export default function MrzAfiliadoPanel({
         )}
       </div>
 
-      {!showResult && (
+      {step === "validating" && (
+        <IgssConsultaLoader
+          compact
+          pacienteNombre={
+            parsed?.nombre && parsed?.apellido
+              ? `${parsed.apellido}, ${parsed.nombre}`
+              : cuiManual
+                ? `CUI ${cuiManual}`
+                : undefined
+          }
+        />
+      )}
+
+      {!showResult && step !== "validating" && (
         <div className="space-y-3">
           <div>
             <input
@@ -180,17 +208,12 @@ export default function MrzAfiliadoPanel({
                   handleMrzInput(text);
                 }
               }}
-              disabled={disabled || step === "validating"}
+              disabled={disabled}
               placeholder="Enfocá aquí y escaneá el documento…"
               autoComplete="off"
               spellCheck={false}
               className="h-11 w-full rounded-lg border border-brand-300 bg-white px-3 font-mono text-sm tracking-wide dark:border-brand-700 dark:bg-gray-900 dark:text-white"
             />
-            {(step === "validating") && (
-              <p className="mt-1.5 text-xs text-brand-600 dark:text-brand-400">
-                Consultando afiliación IGSS…
-              </p>
-            )}
           </div>
 
           <div className="flex items-end gap-2">
@@ -200,14 +223,14 @@ export default function MrzAfiliadoPanel({
                 value={cuiManual}
                 onChange={(e) => setCuiManual(e.target.value.replace(/\D/g, ""))}
                 placeholder="Ej. 1234567890101"
-                disabled={disabled || step === "validating"}
+                disabled={disabled}
               />
             </div>
             <Button
               type="button"
               size="sm"
               variant="outline"
-              disabled={disabled || step === "validating" || cuiManual.length < 8}
+              disabled={disabled || cuiManual.length < 8}
               onClick={() => void validarCuiManual()}
               className="mb-0.5 shrink-0"
             >

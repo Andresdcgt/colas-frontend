@@ -34,6 +34,7 @@ import {
 import { Modal } from "../../components/ui/modal";
 import TrasladarTurnoModal from "../../components/turnos/TrasladarTurnoModal";
 import MrzAfiliadoPanel from "../../components/recepcion/MrzAfiliadoPanel";
+import IgssConsultaLoader, { conEsperaIgss } from "../../components/recepcion/IgssConsultaLoader";
 import TextArea from "../../components/form/input/TextArea";
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -121,7 +122,6 @@ export default function FormElements() {
   const [recuperandoId, setRecuperandoId] = useState<string | null>(null);
   const [afiliacion, setAfiliacion] = useState<AfiliacionIgssResult | null>(null);
   const [validandoPacienteId, setValidandoPacienteId] = useState<string | null>(null);
-  const [busquedaManual, setBusquedaManual] = useState(false);
 
   const consultoriosAgrupados = useMemo(() => groupConsultorios(consultorios), [consultorios]);
 
@@ -140,7 +140,7 @@ export default function FormElements() {
             p.apellido.toLowerCase().includes(q) ||
             p.dni.toLowerCase().includes(q)
         );
-    return list.slice(0, 10);
+    return list;
   }, [pacientes, pacienteSearch]);
 
   const loadTurnos = useCallback(async () => {
@@ -312,7 +312,6 @@ export default function FormElements() {
     setPacientes((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, p]));
     setForm((f) => ({ ...f, paciente_id: p.id }));
     setAfiliacion(aff);
-    setBusquedaManual(false);
     setPacienteSearch("");
   };
 
@@ -326,11 +325,13 @@ export default function FormElements() {
     setValidandoPacienteId(p.id);
     setError("");
     try {
-      const resultado = await validarAfiliacionIgss({
-        cui: p.dni.replace(/\D/g, "") || p.dni,
-        nombre: p.nombre,
-        apellido: p.apellido,
-      });
+      const resultado = await conEsperaIgss(
+        validarAfiliacionIgss({
+          cui: p.dni.replace(/\D/g, "") || p.dni,
+          nombre: p.nombre,
+          apellido: p.apellido,
+        })
+      );
       setAfiliacion(resultado);
       if (!resultado.elegible) {
         setError(resultado.mensaje);
@@ -338,7 +339,6 @@ export default function FormElements() {
       }
       setForm((f) => ({ ...f, paciente_id: p.id }));
       setPacienteSearch("");
-      setBusquedaManual(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al validar afiliación");
     } finally {
@@ -509,37 +509,45 @@ export default function FormElements() {
                 )}
               </div>
 
-              {!(selectedPaciente && afiliacion?.elegible) && (
-                <MrzAfiliadoPanel
-                  key="mrz-scan"
-                  disabled={submitting}
-                  tenantId={selectedConsultorio?.tenant_id}
-                  onPacienteSelected={handlePacienteMrz}
-                  onClear={limpiarPaciente}
-                />
-              )}
+              <MrzAfiliadoPanel
+                key="mrz-scan"
+                disabled={submitting}
+                tenantId={selectedConsultorio?.tenant_id}
+                showInlineResult={false}
+                onPacienteSelected={handlePacienteMrz}
+                onClear={limpiarPaciente}
+              />
 
-              <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => setBusquedaManual((v) => !v)}
-                    className="text-xs font-medium text-gray-500 hover:text-brand-600 dark:hover:text-brand-400"
-                  >
-                    {busquedaManual ? "Ocultar búsqueda manual" : "Búsqueda manual de paciente"}
-                  </button>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Pacientes registrados</Label>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      Seleccioná uno para pruebas mientras se integra la API IGSS.
+                    </p>
+                  </div>
                   <Link
                     to="/basic-tables"
-                    className="text-xs font-medium text-brand-500 hover:underline"
+                    className="shrink-0 text-xs font-medium text-brand-500 hover:underline"
                   >
                     + Nuevo paciente
                   </Link>
                 </div>
 
-                {selectedPaciente && afiliacion?.elegible && !busquedaManual ? (
+                {selectedPaciente && afiliacion?.elegible && (
                   <div className="flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50/50 px-4 py-3 dark:border-brand-800 dark:bg-brand-500/10">
                     <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge color="success" size="sm" variant="light">
+                          Derecho a atención
+                        </Badge>
+                        {afiliacion.fuente === "mock" && (
+                          <Badge color="light" size="sm" variant="light">
+                            Simulación
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="mt-1 font-medium text-gray-900 dark:text-white">
                         {selectedPaciente.apellido}, {selectedPaciente.nombre}
                       </p>
                       <p className="text-xs text-gray-500">
@@ -555,8 +563,17 @@ export default function FormElements() {
                       Cambiar
                     </button>
                   </div>
-                ) : busquedaManual ? (
-                  <div className="space-y-2">
+                )}
+
+                {validandoPacienteId ? (
+                  <IgssConsultaLoader
+                    pacienteNombre={(() => {
+                      const p = pacientes.find((x) => x.id === validandoPacienteId);
+                      return p ? `${p.apellido}, ${p.nombre}` : undefined;
+                    })()}
+                  />
+                ) : (
+                  <>
                     <Input
                       value={pacienteSearch}
                       onChange={(e) => setPacienteSearch(e.target.value)}
@@ -571,33 +588,39 @@ export default function FormElements() {
                         </Link>
                       </p>
                     ) : filteredPacientes.length > 0 ? (
-                      <ul className="max-h-44 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
-                        {filteredPacientes.map((p) => (
-                          <li key={p.id}>
-                            <button
-                              type="button"
-                              disabled={validandoPacienteId === p.id}
-                              onClick={() => void seleccionarPacienteManual(p)}
-                              className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-gray-50 disabled:opacity-50 dark:hover:bg-white/5"
-                            >
-                              <span className="font-medium text-gray-800 dark:text-gray-200">
-                                {p.apellido}, {p.nombre}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {validandoPacienteId === p.id ? "Validando IGSS…" : p.dni}
-                              </span>
-                            </button>
-                          </li>
-                        ))}
+                      <ul className="max-h-52 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                        {filteredPacientes.map((p) => {
+                          const seleccionado = form.paciente_id === p.id && afiliacion?.elegible;
+                          return (
+                            <li key={p.id}>
+                              <button
+                                type="button"
+                                disabled={!!validandoPacienteId || submitting}
+                                onClick={() => void seleccionarPacienteManual(p)}
+                                className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition hover:bg-gray-50 disabled:opacity-50 dark:hover:bg-white/5 ${
+                                  seleccionado
+                                    ? "border-l-2 border-brand-500 bg-brand-50/40 dark:bg-brand-500/10"
+                                    : ""
+                                }`}
+                              >
+                                <span className="font-medium text-gray-800 dark:text-gray-200">
+                                  {p.apellido}, {p.nombre}
+                                </span>
+                                <span className="text-xs text-gray-500">{p.dni}</span>
+                              </button>
+                            </li>
+                          );
+                        })}
                       </ul>
                     ) : pacienteSearch.trim() ? (
                       <p className="text-xs text-gray-500">Sin resultados para &quot;{pacienteSearch}&quot;</p>
                     ) : null}
                     <p className="text-[11px] text-gray-400">
-                      Al seleccionar se consulta derecho a atención en IGSS.
+                      Al seleccionar se consulta derecho a atención en IGSS. Tip: CUI terminado en 0 = no afiliado ·
+                      en 1 = moroso · otro = elegible.
                     </p>
-                  </div>
-                ) : null}
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
