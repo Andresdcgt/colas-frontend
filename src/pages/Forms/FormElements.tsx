@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
 import ComponentCard from "../../components/common/ComponentCard";
@@ -97,37 +97,61 @@ function FormSection({
   title,
   description,
   children,
+  kiosk,
 }: {
   step: number;
   title: string;
   description?: string;
   children: React.ReactNode;
+  kiosk?: boolean;
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-white/[0.02]">
-      <header className="flex items-center gap-3 border-b border-gray-200/80 bg-white px-4 py-3 dark:border-gray-800 dark:bg-white/[0.03]">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
+    <section
+      className={
+        kiosk
+          ? "overflow-hidden rounded-2xl border-2 border-gray-200 bg-white dark:border-gray-700 dark:bg-white/[0.03]"
+          : "overflow-hidden rounded-xl border border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-white/[0.02]"
+      }
+    >
+      <header
+        className={`flex items-center gap-3 border-b border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.03] ${
+          kiosk ? "px-5 py-4" : "px-4 py-3"
+        }`}
+      >
+        <span
+          className={`flex shrink-0 items-center justify-center rounded-full bg-brand-500 font-bold text-white ${
+            kiosk ? "h-10 w-10 text-base" : "h-7 w-7 text-xs"
+          }`}
+        >
           {step}
         </span>
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
+          <h3 className={`font-semibold text-gray-900 dark:text-white ${kiosk ? "text-lg" : "text-sm"}`}>
+            {title}
+          </h3>
           {description && (
-            <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
+            <p className={`text-gray-500 dark:text-gray-400 ${kiosk ? "text-sm" : "text-xs"}`}>
+              {description}
+            </p>
           )}
         </div>
       </header>
-      <div className="p-4">{children}</div>
+      <div className={kiosk ? "p-5" : "p-4"}>{children}</div>
     </section>
   );
 }
 
-function StepCheck({ done, label }: { done: boolean; label: string }) {
+function StepCheck({ done, label, kiosk }: { done: boolean; label: string; kiosk?: boolean }) {
   return (
-    <li className={`flex items-center gap-2 text-xs ${done ? "text-success-700 dark:text-success-400" : "text-gray-400"}`}>
+    <li
+      className={`flex items-center gap-2 ${kiosk ? "text-base" : "text-xs"} ${
+        done ? "text-success-700 dark:text-success-400" : "text-gray-400"
+      }`}
+    >
       <span
-        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-          done ? "bg-success-500 text-white" : "border border-gray-300 dark:border-gray-600"
-        }`}
+        className={`flex shrink-0 items-center justify-center rounded-full font-bold ${
+          kiosk ? "h-6 w-6 text-xs" : "h-4 w-4 text-[10px]"
+        } ${done ? "bg-success-500 text-white" : "border border-gray-300 dark:border-gray-600"}`}
       >
         {done ? "✓" : ""}
       </span>
@@ -136,11 +160,17 @@ function StepCheck({ done, label }: { done: boolean; label: string }) {
   );
 }
 
-const selectClass =
-  "h-11 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
+function getSelectClass(kiosk: boolean): string {
+  return kiosk
+    ? "h-14 w-full rounded-xl border-2 border-gray-300 bg-white px-4 text-lg shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+    : "h-11 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
+}
 
-export default function FormElements() {
-  const { user } = useAuth();
+type KioskTab = "asignar" | "cola";
+
+export default function FormElements({ kiosk = false }: { kiosk?: boolean }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const isRoot = user?.role === "root";
 
   const [consultorios, setConsultorios] = useState<Consultorio[]>([]);
@@ -177,7 +207,21 @@ export default function FormElements() {
   const [recuperandoId, setRecuperandoId] = useState<string | null>(null);
   const [afiliacion, setAfiliacion] = useState<AfiliacionIgssResult | null>(null);
   const [validandoPacienteId, setValidandoPacienteId] = useState<string | null>(null);
-  const [pacienteTab, setPacienteTab] = useState<PacienteTab>("lista");
+  const [pacienteTab, setPacienteTab] = useState<PacienteTab>(kiosk ? "mrz" : "lista");
+  const [kioskTab, setKioskTab] = useState<KioskTab>("asignar");
+  const [reloj, setReloj] = useState(() =>
+    new Date().toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" })
+  );
+
+  const selectClass = getSelectClass(kiosk);
+
+  useEffect(() => {
+    if (!kiosk) return;
+    const id = setInterval(() => {
+      setReloj(new Date().toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" }));
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [kiosk]);
 
   const consultoriosAgrupados = useMemo(() => groupConsultorios(consultorios), [consultorios]);
 
@@ -262,6 +306,9 @@ export default function FormElements() {
 
   const selectedConsultorio = consultorios.find((c) => c.id === form.consultorio_id);
 
+  const pacienteListo = !!form.paciente_id && !!afiliacion?.elegible;
+  const faltaConsultorio = !form.consultorio_id && consultorios.length > 0;
+
   const puedeAsignar =
     !!form.consultorio_id && !!form.paciente_id && !!afiliacion?.elegible && !submitting;
 
@@ -308,6 +355,7 @@ export default function FormElements() {
       }));
       setPacienteSearch("");
       setAfiliacion(null);
+      if (kiosk) setKioskTab("cola");
       await loadTurnos();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al crear turno");
@@ -334,6 +382,7 @@ export default function FormElements() {
     setCreatedTurno(null);
     setPacienteParaEnvio(null);
     setEnviadoMsg(null);
+    if (kiosk) setKioskTab("asignar");
   };
 
   const abrirCancelar = (turno: Turno) => {
@@ -423,10 +472,10 @@ export default function FormElements() {
 
   if (loadingInit) {
     return (
-      <div>
+      <div className={kiosk ? "flex h-full items-center justify-center" : ""}>
         <PageMeta title="Nuevo turno | Colas Turnos" description="Recepción — asignar turnos" />
-        <PageBreadcrumb pageTitle="Nuevo turno" />
-        <div className="flex items-center justify-center py-24 text-gray-500">
+        {!kiosk && <PageBreadcrumb pageTitle="Nuevo turno" />}
+        <div className={`flex items-center justify-center text-gray-500 ${kiosk ? "text-xl" : "py-24"}`}>
           <span className="animate-pulse">Cargando consultorios y pacientes…</span>
         </div>
       </div>
@@ -435,9 +484,9 @@ export default function FormElements() {
 
   if (user?.role === "medico") {
     return (
-      <div>
+      <div className={kiosk ? "flex h-full flex-col p-8" : ""}>
         <PageMeta title="Nuevo turno | Colas Turnos" description="Dar turno" />
-        <PageBreadcrumb pageTitle="Nuevo turno" />
+        {!kiosk && <PageBreadcrumb pageTitle="Nuevo turno" />}
         <ComponentCard title="Acceso restringido">
           <p className="text-gray-600 dark:text-gray-400">
             Solo recepción o administración pueden asignar turnos. Usa{" "}
@@ -459,11 +508,91 @@ export default function FormElements() {
   ];
 
   return (
-    <div className="space-y-5">
+    <div className={kiosk ? "flex h-full flex-col" : "space-y-5"}>
       <PageMeta title="Nuevo turno | Colas Turnos" description="Recepción — asignar y consultar turnos" />
-      <PageBreadcrumb pageTitle="Nuevo turno" />
+      {!kiosk && <PageBreadcrumb pageTitle="Nuevo turno" />}
 
-      {/* Barra superior compacta */}
+      {kiosk && (
+        <header className="shrink-0 border-b border-gray-200 bg-brand-600 px-6 py-5 text-white dark:border-gray-800">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium uppercase tracking-wider text-brand-100">Recepción IGSS</p>
+              <h1 className="mt-1 text-3xl font-bold">Nuevo turno</h1>
+              <p className="mt-1 text-base text-brand-100">
+                {formatFechaLabel(form.fecha)}
+                {selectedConsultorio ? ` · ${selectedConsultorio.nombre}` : ""}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-3">
+              <p className="font-mono text-4xl font-bold tabular-nums">{reloj}</p>
+              {user?.fullName && <p className="text-sm text-brand-100">{user.fullName}</p>}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Link
+                  to="/"
+                  className="rounded-xl bg-white/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/30"
+                >
+                  Menú principal
+                </Link>
+                <Link
+                  to="/panel-llamados"
+                  className="rounded-xl bg-white/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/30"
+                >
+                  Panel llamados
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    logout();
+                    navigate("/signin", { replace: true });
+                  }}
+                  className="rounded-xl border border-white/40 bg-transparent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Cerrar sesión
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            {(
+              [
+                { id: "asignar" as const, label: "Asignar turno" },
+                { id: "cola" as const, label: `Cola (${stats.enCola})` },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setKioskTab(tab.id)}
+                className={`flex-1 rounded-xl py-3.5 text-lg font-semibold transition ${
+                  kioskTab === tab.id
+                    ? "bg-white text-brand-700 shadow-md"
+                    : "bg-brand-500/40 text-white hover:bg-brand-500/60"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-3">
+            {[
+              { label: "En cola", value: stats.enCola },
+              { label: "Atendidos", value: stats.finalizados },
+              { label: "Cancelados", value: stats.cancelados },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className="flex flex-1 items-center justify-between rounded-lg bg-white/15 px-3 py-2"
+              >
+                <span className="text-sm text-brand-100">{s.label}</span>
+                <span className="text-xl font-bold tabular-nums">{s.value}</span>
+              </div>
+            ))}
+          </div>
+        </header>
+      )}
+
+      {!kiosk && (
+      /* Barra superior compacta — escritorio */
       <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03] lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Recepción</h1>
@@ -516,10 +645,15 @@ export default function FormElements() {
           />
         </div>
       </div>
+      )}
 
+      <div className={kiosk ? "flex min-h-0 flex-1 flex-col overflow-hidden" : ""}>
+      <div className={`${kiosk ? "flex-1 overflow-y-auto overscroll-contain px-5 py-4" : ""} space-y-5`}>
       {error && (
         <div
-          className="flex items-start justify-between gap-3 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-400"
+          className={`flex items-start justify-between gap-3 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-error-700 dark:border-error-800 dark:bg-error-500/10 dark:text-error-400 ${
+            kiosk ? "text-lg" : "text-sm"
+          }`}
           role="alert"
         >
           <span>{error}</span>
@@ -530,15 +664,17 @@ export default function FormElements() {
       )}
 
       {createdTurno && pacienteParaEnvio && (
-        <div className="rounded-2xl border border-success-200 bg-success-50/90 p-4 dark:border-success-800 dark:bg-success-500/10">
+        <div className={`rounded-2xl border border-success-200 bg-success-50/90 dark:border-success-800 dark:bg-success-500/10 ${kiosk ? "p-6" : "p-4"}`}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-success-500 text-xl font-bold text-white">
+              <span className={`flex shrink-0 items-center justify-center rounded-xl bg-success-500 font-bold text-white ${kiosk ? "h-20 w-20 text-4xl" : "h-12 w-12 text-xl"}`}>
                 {createdTurno.numero_turno}
               </span>
               <div>
-                <p className="font-semibold text-success-800 dark:text-success-300">Turno asignado</p>
-                <p className="mt-0.5 text-sm text-success-700/90 dark:text-success-400/90">
+                <p className={`font-semibold text-success-800 dark:text-success-300 ${kiosk ? "text-2xl" : ""}`}>
+                  Turno asignado
+                </p>
+                <p className={`mt-0.5 text-success-700/90 dark:text-success-400/90 ${kiosk ? "text-lg" : "text-sm"}`}>
                   {pacienteParaEnvio.apellido}, {pacienteParaEnvio.nombre} · {formatHora(createdTurno.hora)}
                   {selectedConsultorio && ` · ${selectedConsultorio.nombre}`}
                 </p>
@@ -566,32 +702,47 @@ export default function FormElements() {
             <button
               type="button"
               onClick={cerrarExito}
-              className="text-sm font-medium text-success-800 underline dark:text-success-400"
+              className={`font-medium text-success-800 underline dark:text-success-400 ${kiosk ? "text-lg" : "text-sm"}`}
             >
-              Siguiente turno
+              {kiosk ? "Asignar otro turno" : "Siguiente turno"}
             </button>
           </div>
         </div>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-12">
+      <div className={kiosk ? "space-y-4" : "grid gap-5 xl:grid-cols-12"}>
         {/* Panel izquierdo — asignación */}
-        <div className="xl:col-span-5 xl:sticky xl:top-4 xl:self-start">
+        {(!kiosk || kioskTab === "asignar") && (
+        <div className={kiosk ? "" : "xl:col-span-5 xl:sticky xl:top-4 xl:self-start"}>
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
+            {!kiosk && (
             <div className="border-b border-gray-100 px-5 py-4 dark:border-gray-800">
               <h2 className="text-base font-semibold text-gray-900 dark:text-white">Asignar turno</h2>
               <p className="mt-0.5 text-xs text-gray-500">Completa los 3 pasos en orden</p>
             </div>
+            )}
 
-            <form onSubmit={handleSubmit} className="space-y-4 p-4">
-              <FormSection step={1} title="Destino" description="Consultorio y horario del turno">
+            <form onSubmit={handleSubmit} className={`space-y-4 ${kiosk ? "p-1" : "p-4"}`}>
+              <FormSection kiosk={kiosk} step={1} title="Destino" description="Consultorio y horario del turno">
                 <div className="space-y-3">
+                  {faltaConsultorio && pacienteListo && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-100">
+                      <span className="font-medium">Falta el consultorio.</span>{" "}
+                      {selectedPaciente
+                        ? `${selectedPaciente.apellido}, ${selectedPaciente.nombre} ya fue validado — elige el consultorio para asignar el turno.`
+                        : "El paciente ya fue validado — elige el consultorio para asignar el turno."}
+                    </div>
+                  )}
                   <div>
                     <Label>Consultorio</Label>
                     <select
                       value={form.consultorio_id}
                       onChange={(e) => setForm((f) => ({ ...f, consultorio_id: e.target.value }))}
-                      className={selectClass}
+                      className={`${selectClass}${
+                        faltaConsultorio && pacienteListo
+                          ? " border-amber-400 ring-1 ring-amber-300 dark:border-amber-600 dark:ring-amber-700"
+                          : ""
+                      }`}
                     >
                       <option value="">Selecciona consultorio</option>
                       {Array.from(consultoriosAgrupados.entries()).map(([sede, lista]) => (
@@ -644,7 +795,14 @@ export default function FormElements() {
                 </div>
               </FormSection>
 
-              <FormSection step={2} title="Paciente" description="Escanear documento o buscar en el registro">
+              <FormSection kiosk={kiosk} step={2} title="Paciente" description="Escanear documento o buscar en el registro">
+                {faltaConsultorio && !pacienteListo && (
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-100">
+                    <span className="font-medium">Selecciona el consultorio primero</span> (paso 1).
+                    También puedes escanear el DPI y elegir consultorio después.
+                  </div>
+                )}
+
                 {selectedPaciente && afiliacion?.elegible ? (
                   <div className="mb-4 flex items-center justify-between rounded-xl border border-success-200 bg-success-50/60 px-4 py-3 dark:border-success-800 dark:bg-success-500/10">
                     <div className="min-w-0">
@@ -676,7 +834,14 @@ export default function FormElements() {
                   </div>
                 ) : null}
 
-                <div className="mb-3 flex rounded-lg border border-gray-200 bg-gray-100/80 p-1 dark:border-gray-700 dark:bg-gray-900/50">
+                {pacienteListo && faltaConsultorio && (
+                  <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-100">
+                    Selecciona el <span className="font-medium">consultorio en el paso 1</span> para poder
+                    asignar el turno.
+                  </div>
+                )}
+
+                <div className={`mb-3 flex rounded-lg border border-gray-200 bg-gray-100/80 p-1 dark:border-gray-700 dark:bg-gray-900/50 ${kiosk ? "p-1.5" : ""}`}>
                   {(
                     [
                       { id: "mrz" as const, label: "Escanear MRZ" },
@@ -687,7 +852,9 @@ export default function FormElements() {
                       key={tab.id}
                       type="button"
                       onClick={() => setPacienteTab(tab.id)}
-                      className={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition ${
+                      className={`flex-1 rounded-md font-medium transition ${
+                        kiosk ? "px-4 py-3.5 text-base" : "px-3 py-2 text-xs"
+                      } ${
                         pacienteTab === tab.id
                           ? "bg-white text-brand-700 shadow-sm dark:bg-gray-800 dark:text-brand-400"
                           : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
@@ -772,7 +939,7 @@ export default function FormElements() {
                 )}
               </FormSection>
 
-              <FormSection step={3} title="Detalles" description="Opcional">
+              <FormSection kiosk={kiosk} step={3} title="Detalles" description="Opcional">
                 <div>
                   <Label>Observaciones</Label>
                   <Input
@@ -784,10 +951,11 @@ export default function FormElements() {
                 </div>
               </FormSection>
 
-              <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/30">
-                <ul className="mb-4 space-y-1.5">
-                  <StepCheck done={!!form.consultorio_id} label="Consultorio seleccionado" />
+              <div className={`rounded-xl border border-gray-200 bg-gray-50/80 dark:border-gray-800 dark:bg-gray-900/30 ${kiosk ? "p-5" : "p-4"}`}>
+                <ul className={`mb-4 space-y-2 ${kiosk ? "space-y-2.5" : "space-y-1.5"}`}>
+                  <StepCheck kiosk={kiosk} done={!!form.consultorio_id} label="Consultorio seleccionado" />
                   <StepCheck
+                    kiosk={kiosk}
                     done={!!form.paciente_id && !!afiliacion?.elegible}
                     label="Paciente validado (al dia)"
                   />
@@ -795,7 +963,9 @@ export default function FormElements() {
                 <button
                   type="submit"
                   disabled={!puedeAsignar}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-5 py-3.5 text-sm font-semibold text-white shadow-theme-xs transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-45"
+                  className={`inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 font-semibold text-white shadow-theme-xs transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-45 ${
+                    kiosk ? "px-6 py-5 text-xl" : "px-5 py-3.5 text-sm"
+                  }`}
                 >
                   {submitting ? "Asignando turno…" : "Asignar turno a la cola"}
                 </button>
@@ -803,40 +973,70 @@ export default function FormElements() {
             </form>
           </div>
         </div>
+        )}
 
         {/* Panel derecho — cola */}
-        <div className="xl:col-span-7">
+        {(!kiosk || kioskTab === "cola") && (
+        <div className={kiosk ? "" : "xl:col-span-7"}>
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
-            <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+            <div className={`flex flex-col gap-3 border-b border-gray-100 dark:border-gray-800 ${kiosk ? "px-5 py-4" : "px-5 py-4 sm:flex-row sm:items-center sm:justify-between"}`}>
               <div>
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                <h2 className={`font-semibold text-gray-900 dark:text-white ${kiosk ? "text-xl" : "text-base"}`}>
                   Cola del dia
                 </h2>
-                <p className="text-xs text-gray-500">
+                <p className={`text-gray-500 ${kiosk ? "text-sm" : "text-xs"}`}>
                   {soloConsultorio && selectedConsultorio
                     ? `${selectedConsultorio.nombre}${selectedConsultorio.sucursal_nombre ? ` · ${selectedConsultorio.sucursal_nombre}` : ""}`
                     : "Todos los consultorios"}
                 </p>
               </div>
-              <label className="flex cursor-pointer items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                <input
-                  type="checkbox"
-                  checked={soloConsultorio}
-                  onChange={(e) => setSoloConsultorio(e.target.checked)}
-                  disabled={!form.consultorio_id}
-                  className="rounded border-gray-300"
-                />
-                Solo consultorio seleccionado
-              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                {kiosk && (
+                  <>
+                    {[
+                      { label: "Ayer", offset: -1 },
+                      { label: "Hoy", offset: 0 },
+                      { label: "Mañana", offset: 1 },
+                    ].map((d) => (
+                      <button
+                        key={d.label}
+                        type="button"
+                        onClick={() => setFechaRapida(d.offset)}
+                        className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300"
+                      >
+                        {d.label}
+                      </button>
+                    ))}
+                    <input
+                      type="date"
+                      value={form.fecha}
+                      onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))}
+                      className="h-11 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    />
+                  </>
+                )}
+                <label className={`flex cursor-pointer items-center gap-2 text-gray-600 dark:text-gray-400 ${kiosk ? "text-sm" : "text-xs"}`}>
+                  <input
+                    type="checkbox"
+                    checked={soloConsultorio}
+                    onChange={(e) => setSoloConsultorio(e.target.checked)}
+                    disabled={!form.consultorio_id}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  Solo consultorio seleccionado
+                </label>
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-1.5 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+            <div className={`flex flex-wrap gap-2 border-b border-gray-100 dark:border-gray-800 ${kiosk ? "px-5 py-4" : "gap-1.5 px-4 py-3"}`}>
               {filtros.map((f) => (
                 <button
                   key={f.id}
                   type="button"
                   onClick={() => setListaFiltro(f.id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  className={`rounded-xl font-medium transition ${
+                    kiosk ? "px-4 py-2.5 text-base" : "rounded-lg px-3 py-1.5 text-xs"
+                  } ${
                     listaFiltro === f.id
                       ? "bg-brand-500 text-white shadow-sm"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
@@ -869,6 +1069,94 @@ export default function FormElements() {
                       ? "Aún no hay turnos para esta fecha."
                       : "Prueba otro filtro o cambia la fecha."}
                   </p>
+                </div>
+              ) : kiosk ? (
+                <div className="space-y-3">
+                  {turnosFiltrados.map((t) => (
+                    <div
+                      key={t.id}
+                      className={`rounded-2xl border-2 p-5 ${
+                        t.id === createdTurno?.id
+                          ? "border-success-300 bg-success-50/60 dark:border-success-700 dark:bg-success-500/10"
+                          : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900/30"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-baseline gap-3">
+                          <span className="font-mono text-5xl font-black leading-none text-brand-600 dark:text-brand-400">
+                            {t.numero_turno}
+                          </span>
+                          {t.prioridad === "urgencia" && (
+                            <Badge color="error" size="sm" variant="light">
+                              URG
+                            </Badge>
+                          )}
+                        </div>
+                        <Badge color={ESTADO_COLOR[t.estado] ?? "light"} size="sm" variant="light">
+                          {ESTADO_LABEL[t.estado] ?? t.estado}
+                        </Badge>
+                      </div>
+                      <p className="mt-3 text-xl font-semibold text-gray-900 dark:text-white">
+                        {t.paciente_apellido}, {t.paciente_nombre}
+                      </p>
+                      <p className="mt-1 text-base text-gray-500">
+                        {formatHora(t.hora)}
+                        {t.consultorio_nombre ? ` · ${t.consultorio_nombre}` : ""}
+                        {t.paciente_dni ? ` · CUI ${t.paciente_dni}` : ""}
+                      </p>
+                      {t.motivo_cancelacion && (
+                        <p className="mt-2 text-sm text-gray-400">{t.motivo_cancelacion}</p>
+                      )}
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        {CANCELABLES.has(t.estado) && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setTurnoATrasladar(t)}
+                              className="rounded-lg bg-brand-50 px-4 py-2.5 text-base font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-400"
+                            >
+                              Trasladar
+                            </button>
+                            {PAUSABLES.has(t.estado) && (
+                              <button
+                                type="button"
+                                onClick={() => setTurnoAPausar(t)}
+                                className="rounded-lg bg-amber-50 px-4 py-2.5 text-base font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-400"
+                              >
+                                Pausar
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => abrirCancelar(t)}
+                              className="rounded-lg bg-red-50 px-4 py-2.5 text-base font-medium text-red-700 dark:bg-red-500/15 dark:text-red-400"
+                            >
+                              Cancelar
+                            </button>
+                          </>
+                        )}
+                        {t.estado === "en_pausa" && (
+                          <button
+                            type="button"
+                            onClick={() => setTurnoAReanudar(t)}
+                            className="rounded-lg bg-amber-50 px-4 py-2.5 text-base font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-400"
+                          >
+                            Reanudar
+                          </button>
+                        )}
+                        {t.estado === "cancelado" && (
+                          <button
+                            type="button"
+                            disabled={recuperandoId === t.id}
+                            onClick={() => void handleRecuperar(t)}
+                            className="rounded-lg bg-brand-50 px-4 py-2.5 text-base font-medium text-brand-700 disabled:opacity-50 dark:bg-brand-500/15 dark:text-brand-400"
+                          >
+                            {recuperandoId === t.id ? "Recuperando…" : "Recuperar"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-gray-100 dark:border-gray-800">
@@ -990,12 +1278,15 @@ export default function FormElements() {
                   </Table>
                 </div>
               )}
-              <p className="mt-3 text-center text-[11px] text-gray-400">
+              <p className={`mt-3 text-center text-gray-400 ${kiosk ? "text-sm" : "text-[11px]"}`}>
                 Actualización automática en tiempo real
               </p>
             </div>
           </div>
         </div>
+        )}
+      </div>
+      </div>
       </div>
 
       <Modal isOpen={!!turnoACancelar} onClose={cerrarCancelar} className="max-w-md">

@@ -26,6 +26,16 @@ const TD1_TOTAL = 90;
 const TD3_TOTAL = 88;
 const FOCUS_INTERVAL_MS = 320;
 
+/** No robar foco si el usuario está en otro control del formulario (p. ej. select de consultorio). */
+function shouldDeferMrzCaptureFocus(captureEl: HTMLElement): boolean {
+  const active = document.activeElement;
+  if (!active || active === captureEl || active === document.body) return false;
+  if (active.closest("[data-mrz-modal]")) return true;
+  return !!active.closest(
+    "select, textarea, input:not([aria-hidden]), button, a[href], label, [role='listbox'], [role='option']"
+  );
+}
+
 export type ReaderHookOptions = {
   enableHidFallback?: boolean;
   hidCaptureElement?: HTMLElement | null;
@@ -232,7 +242,7 @@ export function useMrzReader(
     if (disabled || !hidCaptureElement) return;
     const el = hidCaptureElement;
     const refocus = (): void => {
-      if (document.activeElement?.closest("[data-mrz-modal]")) return;
+      if (shouldDeferMrzCaptureFocus(el)) return;
       if (document.activeElement !== el) {
         el.focus({ preventScroll: true });
       }

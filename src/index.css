@@ -787,6 +787,10 @@ span.flatpickr-weekday,
   @apply !bg-gray-700;
 }
 
-.simplebar-scrollbar.simplebar-visible:before {
-  @apply opacity-100;
+html.kiosk-viewport,
+html.kiosk-viewport body,
+html.kiosk-viewport #root {
+  overflow: hidden;
+  height: 100%;
+  margin: 0;
 }
