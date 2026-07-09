@@ -15,6 +15,7 @@ const ESTADO_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
   llamado: "Llamado",
   en_atencion: "En atención",
+  en_pausa: "En pausa",
   finalizado: "Finalizado",
   cancelado: "Cancelado",
   no_show: "No asistió",

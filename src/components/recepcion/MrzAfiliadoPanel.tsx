@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import Badge from "../ui/badge/Badge";
 import Button from "../ui/button/Button";
 import Label from "../form/Label";
@@ -10,8 +10,9 @@ import {
   type AfiliacionIgssResult,
   type Paciente,
 } from "../../lib/api";
-import { isMrzComplete, parseMrz } from "../../lib/mrz/parser";
+import { parseMrz } from "../../lib/mrz/parser";
 import type { MrzParsed } from "../../lib/mrz/types";
+import { useMrzReader } from "../../lib/mrz/useMrzReader";
 import IgssConsultaLoader, { conEsperaIgss } from "./IgssConsultaLoader";
 
 type Props = {
@@ -23,7 +24,13 @@ type Props = {
   onClear: () => void;
 };
 
-type Step = "idle" | "validating" | "ready" | "error";
+type Step = "idle" | "review" | "validating" | "ready" | "error";
+
+function formatCuiGrouped(cui: string): string {
+  const d = cui.replace(/\D/g, "");
+  if (d.length !== 13) return cui;
+  return `${d.slice(0, 4)} ${d.slice(4, 9)} ${d.slice(9, 13)}`;
+}
 
 export default function MrzAfiliadoPanel({
   disabled,
@@ -33,30 +40,31 @@ export default function MrzAfiliadoPanel({
   onPacienteSelected,
   onClear,
 }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [mrzBuffer, setMrzBuffer] = useState("");
+  const [captureEl, setCaptureEl] = useState<HTMLInputElement | null>(null);
   const [cuiManual, setCuiManual] = useState("");
   const [step, setStep] = useState<Step>("idle");
   const [error, setError] = useState("");
   const [parsed, setParsed] = useState<MrzParsed | null>(null);
+  const [pendingReview, setPendingReview] = useState<MrzParsed | null>(null);
   const [afiliacion, setAfiliacion] = useState<AfiliacionIgssResult | null>(null);
   const [paciente, setPaciente] = useState<Paciente | null>(null);
 
   const reset = useCallback(() => {
-    setMrzBuffer("");
     setCuiManual("");
     setStep("idle");
     setError("");
     setParsed(null);
+    setPendingReview(null);
     setAfiliacion(null);
     setPaciente(null);
     onClear();
-    inputRef.current?.focus();
-  }, [onClear]);
+    captureEl?.focus();
+  }, [onClear, captureEl]);
 
   const procesarDocumento = useCallback(
     async (mrz: MrzParsed) => {
       setParsed(mrz);
+      setPendingReview(null);
       setStep("validating");
       setError("");
 
@@ -96,7 +104,6 @@ export default function MrzAfiliadoPanel({
           setPaciente(encontrado);
           setStep("ready");
         } else {
-          setMrzBuffer("");
           setCuiManual("");
           setStep("idle");
           setParsed(null);
@@ -111,28 +118,36 @@ export default function MrzAfiliadoPanel({
     [onPacienteSelected, showInlineResult, tenantId]
   );
 
-  const handleMrzInput = (value: string) => {
-    setMrzBuffer(value);
-    if (isMrzComplete(value)) {
-      const mrz = parseMrz(value);
-      if (mrz) {
-        setMrzBuffer("");
+  const handleScan = useCallback(
+    (mrz: MrzParsed) => {
+      if (disabled || step === "validating") return;
+      if (mrz.checksumsOk) {
         void procesarDocumento(mrz);
+      } else {
+        setPendingReview(mrz);
+        setStep("review");
+        setError("");
       }
-    }
-  };
+    },
+    [disabled, step, procesarDocumento]
+  );
 
-  const handleMrzKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && mrzBuffer.trim()) {
-      e.preventDefault();
-      const mrz = parseMrz(mrzBuffer);
-      if (!mrz) {
-        setError("No se pudo leer el MRZ. Verifica el documento o ingresa el CUI manualmente.");
-        setStep("error");
-        return;
-      }
-      setMrzBuffer("");
-      void procesarDocumento(mrz);
+  const handleReaderError = useCallback((err: { reason: string }) => {
+    setError(`No se pudo leer el MRZ (${err.reason}). Verifica el documento o ingresa el CUI manualmente.`);
+    setStep("error");
+  }, []);
+
+  const readerState = useMrzReader(handleScan, handleReaderError, {
+    hidCaptureElement: captureEl,
+    disabled: disabled || step === "validating" || step === "review",
+  });
+
+  const handlePaste = (text: string) => {
+    const result = parseMrz(text);
+    if (result.ok) {
+      handleScan(result.data);
+    } else {
+      handleReaderError(result.error);
     }
   };
 
@@ -153,17 +168,13 @@ export default function MrzAfiliadoPanel({
       sexo: null,
       nacionalidad: null,
       fechaVencimiento: null,
+      checksumsOk: true,
       raw: "",
     });
   };
 
-  useEffect(() => {
-    if (!disabled) {
-      inputRef.current?.focus();
-    }
-  }, [disabled]);
-
   const showResult = step === "ready" && paciente && afiliacion;
+  const scanning = step === "idle" && !disabled;
 
   return (
     <div
@@ -181,13 +192,42 @@ export default function MrzAfiliadoPanel({
               Escanea DPI o pasaporte. Se verifica si el paciente esta al dia segun estatutos IGSS.
             </p>
           </div>
-          {afiliacion?.fuente === "mock" && (
-            <Badge color="light" size="sm" variant="light">
-              Modo simulación
-            </Badge>
-          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {readerState.agentConnected && (
+              <Badge color="light" size="sm" variant="light">
+                Agente conectado
+              </Badge>
+            )}
+            {readerState.hidActive && (
+              <Badge color="light" size="sm" variant="light">
+                HID activo
+              </Badge>
+            )}
+            {afiliacion?.fuente === "mock" && (
+              <Badge color="light" size="sm" variant="light">
+                Modo simulación
+              </Badge>
+            )}
+          </div>
         </div>
       )}
+
+      <input
+        ref={setCaptureEl}
+        type="text"
+        readOnly
+        tabIndex={-1}
+        aria-hidden
+        disabled={disabled}
+        onPaste={(e) => {
+          const text = e.clipboardData.getData("text");
+          if (text.length > 40) {
+            e.preventDefault();
+            handlePaste(text);
+          }
+        }}
+        className="sr-only"
+      />
 
       {step === "validating" && (
         <IgssConsultaLoader
@@ -202,29 +242,56 @@ export default function MrzAfiliadoPanel({
         />
       )}
 
-      {!showResult && step !== "validating" && (
-        <div className="space-y-3">
-          <div>
-            <input
-              ref={inputRef}
-              type="text"
-              value={mrzBuffer}
-              onChange={(e) => handleMrzInput(e.target.value)}
-              onKeyDown={handleMrzKeyDown}
-              onPaste={(e) => {
-                const text = e.clipboardData.getData("text");
-                if (text.includes("\n") || text.length > 40) {
-                  e.preventDefault();
-                  handleMrzInput(text);
-                }
-              }}
-              disabled={disabled}
-              placeholder="Enfoca aqui y escanea el documento…"
-              autoComplete="off"
-              spellCheck={false}
-              className="h-11 w-full rounded-lg border border-brand-300 bg-white px-3 font-mono text-sm tracking-wide dark:border-brand-700 dark:bg-gray-900 dark:text-white"
-            />
+      {step === "review" && pendingReview && (
+        <div className="space-y-3" data-mrz-modal>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-500/10">
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+              Lectura con advertencia
+            </p>
+            <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+              Los dígitos de control del MRZ no coinciden. Revisa los datos antes de continuar.
+            </p>
+            <dl className="mt-3 space-y-1 text-sm text-gray-800 dark:text-gray-200">
+              <div className="flex gap-2">
+                <dt className="text-gray-500">CUI</dt>
+                <dd className="font-mono">{formatCuiGrouped(pendingReview.cui)}</dd>
+              </div>
+              {(pendingReview.apellido || pendingReview.nombre) && (
+                <div className="flex gap-2">
+                  <dt className="text-gray-500">Nombre</dt>
+                  <dd>
+                    {[pendingReview.apellido, pendingReview.nombre].filter(Boolean).join(", ")}
+                  </dd>
+                </div>
+              )}
+              {pendingReview.fechaNacimiento && (
+                <div className="flex gap-2">
+                  <dt className="text-gray-500">Nacimiento</dt>
+                  <dd>{pendingReview.fechaNacimiento}</dd>
+                </div>
+              )}
+            </dl>
           </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => void procesarDocumento(pendingReview)}>
+              Continuar de todos modos
+            </Button>
+            <Button size="sm" variant="outline" onClick={reset}>
+              Reintentar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!showResult && step !== "validating" && step !== "review" && (
+        <div className="space-y-3">
+          {scanning && (
+            <p className="flex h-11 items-center rounded-lg border border-dashed border-brand-300 bg-white/80 px-3 text-sm text-gray-500 dark:border-brand-700 dark:bg-gray-900/50 dark:text-gray-400">
+              {readerState.lastError
+                ? "Error en la última lectura — escanea de nuevo"
+                : "Listo para escanear — coloca el documento en el lector"}
+            </p>
+          )}
 
           <div className="flex items-end gap-2">
             <div className="flex-1">
@@ -237,7 +304,6 @@ export default function MrzAfiliadoPanel({
               />
             </div>
             <Button
-              type="button"
               size="sm"
               variant="outline"
               disabled={disabled || cuiManual.length < 8}
@@ -277,7 +343,7 @@ export default function MrzAfiliadoPanel({
                 {paciente.apellido}, {paciente.nombre}
               </p>
               <p className="text-xs text-gray-500">
-                CUI {paciente.dni}
+                CUI {formatCuiGrouped(paciente.dni)}
                 {afiliacion.numero_afiliacion && ` · Afil. ${afiliacion.numero_afiliacion}`}
               </p>
               {parsed?.fechaNacimiento && (
@@ -296,9 +362,10 @@ export default function MrzAfiliadoPanel({
         </div>
       )}
 
-      {!showResult && step !== "error" && !embedded && (
+      {!showResult && step !== "error" && step !== "review" && !embedded && (
         <p className="mt-3 text-[11px] text-gray-400">
           Tip dev: CUI terminado en 0 = no afiliado · en 1 = moroso · otro = elegible (simulación).
+          También puedes pegar un MRZ crudo en el área de escaneo.
         </p>
       )}
     </div>

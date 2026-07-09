@@ -7,6 +7,7 @@ import Label from "../components/form/Label";
 import TextArea from "../components/form/input/TextArea";
 import { Modal } from "../components/ui/modal";
 import TrasladarTurnoModal from "../components/turnos/TrasladarTurnoModal";
+import { PausarTurnoModal, ReanudarTurnoModal } from "../components/turnos/TurnoPausaModals";
 import { useAuth } from "../context/AuthContext";
 import { filterByTenant } from "../lib/tenant-filter";
 import { useTurnosSocket } from "../hooks/useTurnosSocket";
@@ -84,6 +85,7 @@ function TurnoEnLlamado({
   onLlamar,
   onPresente,
   onReencolar,
+  onPausar,
   onNoAsistio,
   onTrasladar,
 }: {
@@ -93,6 +95,7 @@ function TurnoEnLlamado({
   onLlamar: () => void;
   onPresente: () => void;
   onReencolar: () => void;
+  onPausar: () => void;
   onNoAsistio: () => void;
   onTrasladar: () => void;
 }) {
@@ -136,6 +139,11 @@ function TurnoEnLlamado({
             Presente
           </Button>
           {!agotado && (
+            <Button size="md" variant="outline" disabled={busy} onClick={onPausar}>
+              Pausar
+            </Button>
+          )}
+          {!agotado && (
             <Button size="md" variant="outline" disabled={busy} onClick={onReencolar}>
               Pasar al final
             </Button>
@@ -172,6 +180,8 @@ export default function PanelLlamados() {
 
   const [cierreTurno, setCierreTurno] = useState<Turno | null>(null);
   const [turnoATrasladar, setTurnoATrasladar] = useState<Turno | null>(null);
+  const [turnoAPausar, setTurnoAPausar] = useState<Turno | null>(null);
+  const [turnoAReanudar, setTurnoAReanudar] = useState<Turno | null>(null);
   const [notaNoAsistio, setNotaNoAsistio] = useState("");
   const [cerrando, setCerrando] = useState(false);
   const [consultorioId, setConsultorioId] = useState(
@@ -364,6 +374,7 @@ export default function PanelLlamados() {
   const llamadoActivo = lista.find((t) => t.estado === "llamado") ?? null;
   const enAtencion = lista.filter((t) => t.estado === "en_atencion");
   const enEspera = lista.filter((t) => t.estado === "pendiente");
+  const enPausa = lista.filter((t) => t.estado === "en_pausa");
 
   const alertasConsultorio = useMemo(() => {
     void tick;
@@ -618,6 +629,7 @@ export default function PanelLlamados() {
                       onLlamar={() => void ejecutarLlamar(llamadoActivo)}
                       onPresente={() => void handlePresente(llamadoActivo)}
                       onReencolar={() => void handleReencolar(llamadoActivo)}
+                      onPausar={() => setTurnoAPausar(llamadoActivo)}
                       onNoAsistio={() => {
                         setCierreTurno(llamadoActivo);
                         setNotaNoAsistio("");
@@ -652,12 +664,61 @@ export default function PanelLlamados() {
                               <Button
                                 size="sm"
                                 variant="outline"
+                                onClick={() => setTurnoAPausar(t)}
+                              >
+                                Pausar
+                              </Button>
+                            )}
+                            {canOperar && (
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 onClick={() => setTurnoATrasladar(t)}
                               >
                                 Trasladar
                               </Button>
                             )}
                           </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {enPausa.length > 0 && (
+                  <section className="rounded-2xl border border-amber-200 bg-amber-50/30 dark:border-amber-800 dark:bg-amber-500/5">
+                    <h3 className="border-b border-amber-200/80 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-800 dark:text-amber-300">
+                      En pausa ({enPausa.length})
+                    </h3>
+                    <ul className="divide-y divide-amber-100 dark:divide-amber-900/40">
+                      {enPausa.map((t) => (
+                        <li key={t.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-lg font-bold text-amber-700 dark:text-amber-400">
+                                {t.numero_turno}
+                              </span>
+                              <Badge color="warning" size="sm" variant="light">
+                                Pausado
+                              </Badge>
+                              {t.orden_pausa != null && (
+                                <span className="text-xs text-amber-700/80 dark:text-amber-400/80">
+                                  Lugar #{t.orden_pausa}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                              {t.paciente_apellido}, {t.paciente_nombre}
+                            </p>
+                            {t.motivo_pausa && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{t.motivo_pausa}</p>
+                            )}
+                          </div>
+                          {canOperar && (
+                            <Button size="sm" onClick={() => setTurnoAReanudar(t)}>
+                              Reanudar
+                            </Button>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -725,6 +786,14 @@ export default function PanelLlamados() {
                                   size="sm"
                                   variant="outline"
                                   disabled={busy}
+                                  onClick={() => setTurnoAPausar(t)}
+                                >
+                                  Pausar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy}
                                   onClick={() => setTurnoATrasladar(t)}
                                 >
                                   Trasladar
@@ -747,6 +816,18 @@ export default function PanelLlamados() {
         turno={turnoATrasladar}
         fecha={fecha}
         onClose={() => setTurnoATrasladar(null)}
+        onSuccess={() => void load()}
+      />
+
+      <PausarTurnoModal
+        turno={turnoAPausar}
+        onClose={() => setTurnoAPausar(null)}
+        onSuccess={() => void load()}
+      />
+
+      <ReanudarTurnoModal
+        turno={turnoAReanudar}
+        onClose={() => setTurnoAReanudar(null)}
         onSuccess={() => void load()}
       />
 

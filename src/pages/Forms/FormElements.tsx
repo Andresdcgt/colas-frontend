@@ -33,6 +33,7 @@ import {
 } from "../../components/ui/table";
 import { Modal } from "../../components/ui/modal";
 import TrasladarTurnoModal from "../../components/turnos/TrasladarTurnoModal";
+import { PausarTurnoModal, ReanudarTurnoModal } from "../../components/turnos/TurnoPausaModals";
 import MrzAfiliadoPanel from "../../components/recepcion/MrzAfiliadoPanel";
 import IgssConsultaLoader, { conEsperaIgss } from "../../components/recepcion/IgssConsultaLoader";
 import TextArea from "../../components/form/input/TextArea";
@@ -41,6 +42,7 @@ const ESTADO_LABEL: Record<string, string> = {
   pendiente: "En espera",
   llamado: "Llamado",
   en_atencion: "En atención",
+  en_pausa: "En pausa",
   finalizado: "Finalizado",
   cancelado: "Cancelado",
   no_show: "No asistió",
@@ -50,6 +52,7 @@ const ESTADO_COLOR: Record<string, "primary" | "success" | "warning" | "error" |
   pendiente: "info",
   llamado: "warning",
   en_atencion: "primary",
+  en_pausa: "warning",
   finalizado: "success",
   cancelado: "error",
   no_show: "light",
@@ -57,8 +60,9 @@ const ESTADO_COLOR: Record<string, "primary" | "success" | "warning" | "error" |
 
 type ListaFiltro = "activos" | "finalizados" | "cancelados" | "todos";
 
-const ACTIVOS = new Set(["pendiente", "llamado", "en_atencion"]);
-const CANCELABLES = new Set(["pendiente", "llamado", "en_atencion"]);
+const ACTIVOS = new Set(["pendiente", "llamado", "en_atencion", "en_pausa"]);
+const CANCELABLES = new Set(["pendiente", "llamado", "en_atencion", "en_pausa"]);
+const PAUSABLES = new Set(["pendiente", "llamado", "en_atencion"]);
 const CANCELADOS = new Set(["cancelado", "no_show"]);
 
 function formatHora(hora: string): string {
@@ -166,6 +170,8 @@ export default function FormElements() {
 
   const [turnoACancelar, setTurnoACancelar] = useState<Turno | null>(null);
   const [turnoATrasladar, setTurnoATrasladar] = useState<Turno | null>(null);
+  const [turnoAPausar, setTurnoAPausar] = useState<Turno | null>(null);
+  const [turnoAReanudar, setTurnoAReanudar] = useState<Turno | null>(null);
   const [motivoCancelacion, setMotivoCancelacion] = useState("");
   const [cancelando, setCancelando] = useState(false);
   const [recuperandoId, setRecuperandoId] = useState<string | null>(null);
@@ -930,24 +936,42 @@ export default function FormElements() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex flex-col items-end gap-0.5">
-                              {CANCELABLES.has(t.estado) && (
-                                <>
+                            {CANCELABLES.has(t.estado) && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setTurnoATrasladar(t)}
+                                  className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+                                >
+                                  Trasladar
+                                </button>
+                                {PAUSABLES.has(t.estado) && (
                                   <button
                                     type="button"
-                                    onClick={() => setTurnoATrasladar(t)}
-                                    className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+                                    onClick={() => setTurnoAPausar(t)}
+                                    className="text-xs font-medium text-amber-600 hover:underline dark:text-amber-400"
                                   >
-                                    Trasladar
+                                    Pausar
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => abrirCancelar(t)}
-                                    className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
-                                  >
-                                    Cancelar
-                                  </button>
-                                </>
-                              )}
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => abrirCancelar(t)}
+                                  className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                                >
+                                  Cancelar
+                                </button>
+                              </>
+                            )}
+                            {t.estado === "en_pausa" && (
+                              <button
+                                type="button"
+                                onClick={() => setTurnoAReanudar(t)}
+                                className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
+                              >
+                                Reanudar
+                              </button>
+                            )}
                               {t.estado === "cancelado" && (
                                 <button
                                   type="button"
@@ -997,7 +1021,7 @@ export default function FormElements() {
               disabled={cancelando}
             />
             <p className="mt-1.5 text-xs text-gray-500">
-              Obligatorio. Podrás recuperar el turno después y lo ubicará al final de la cola.
+              Obligatorio. Los turnos en pausa conservan su lugar; al cancelar podras recuperarlos al final de la cola.
             </p>
           </div>
           <div className="mt-6 flex justify-end gap-3">
@@ -1020,6 +1044,18 @@ export default function FormElements() {
         turno={turnoATrasladar}
         fecha={form.fecha}
         onClose={() => setTurnoATrasladar(null)}
+        onSuccess={() => void loadTurnos()}
+      />
+
+      <PausarTurnoModal
+        turno={turnoAPausar}
+        onClose={() => setTurnoAPausar(null)}
+        onSuccess={() => void loadTurnos()}
+      />
+
+      <ReanudarTurnoModal
+        turno={turnoAReanudar}
+        onClose={() => setTurnoAReanudar(null)}
         onSuccess={() => void loadTurnos()}
       />
     </div>

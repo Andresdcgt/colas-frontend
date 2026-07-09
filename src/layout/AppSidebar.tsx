@@ -2,17 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 
 import {
-  BoxCubeIcon,
+  AudioIcon,
+  BuildingIcon,
   CalenderIcon,
   ChevronDownIcon,
+  DoorIcon,
+  EyeIcon,
   GridIcon,
   GroupIcon,
   HorizontaLDots,
   ListIcon,
-  PageIcon,
   PieChartIcon,
-  TableIcon,
   UserCircleIcon,
+  VideoIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "../context/AuthContext";
@@ -55,8 +57,8 @@ const rootMenuSections: NavSection[] = [
     items: [
       { icon: <GroupIcon />, name: "Clínicas y Hospitales", path: "/clinicas" },
       { icon: <UserCircleIcon />, name: "Usuarios", path: "/usuarios" },
-      { icon: <BoxCubeIcon />, name: "Sucursales", path: "/sucursales" },
-      { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
+      { icon: <BuildingIcon />, name: "Sucursales", path: "/sucursales" },
+      { icon: <DoorIcon />, name: "Consultorios", path: "/consultorios" },
       { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
     ],
   },
@@ -64,11 +66,11 @@ const rootMenuSections: NavSection[] = [
     title: "Turnos",
     items: [
       { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
-      { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
+      { icon: <GroupIcon />, name: "Pacientes", path: "/basic-tables" },
       { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
-      { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
-      { icon: <PageIcon />, name: "Panel de llamados", path: "/panel-llamados" },
-      { icon: <PageIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
+      { icon: <EyeIcon className="fill-current" />, name: "Vista médico", path: "/vista-medico" },
+      { icon: <AudioIcon />, name: "Panel de llamados", path: "/panel-llamados" },
+      { icon: <VideoIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
     ],
   },
   {
@@ -90,8 +92,8 @@ const adminClinicaMenuSections: NavSection[] = [
     title: "Administración",
     items: [
       { icon: <UserCircleIcon />, name: "Usuarios", path: "/usuarios" },
-      { icon: <BoxCubeIcon />, name: "Sucursales", path: "/sucursales" },
-      { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
+      { icon: <BuildingIcon />, name: "Sucursales", path: "/sucursales" },
+      { icon: <DoorIcon />, name: "Consultorios", path: "/consultorios" },
       { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
     ],
   },
@@ -99,11 +101,11 @@ const adminClinicaMenuSections: NavSection[] = [
     title: "Turnos",
     items: [
       { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
-      { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
+      { icon: <GroupIcon />, name: "Pacientes", path: "/basic-tables" },
       { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
-      { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
-      { icon: <PageIcon />, name: "Panel de llamados", path: "/panel-llamados" },
-      { icon: <PageIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
+      { icon: <EyeIcon className="fill-current" />, name: "Vista médico", path: "/vista-medico" },
+      { icon: <AudioIcon />, name: "Panel de llamados", path: "/panel-llamados" },
+      { icon: <VideoIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
     ],
   },
   {
@@ -125,7 +127,7 @@ const adminSucursalMenuSections: NavSection[] = [
     title: "Mi sucursal",
     items: [
       { icon: <UserCircleIcon />, name: "Usuarios", path: "/usuarios" },
-      { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
+      { icon: <DoorIcon />, name: "Consultorios", path: "/consultorios" },
       { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
     ],
   },
@@ -133,11 +135,11 @@ const adminSucursalMenuSections: NavSection[] = [
     title: "Turnos",
     items: [
       { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
-      { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
+      { icon: <GroupIcon />, name: "Pacientes", path: "/basic-tables" },
       { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
-      { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
-      { icon: <PageIcon />, name: "Panel de llamados", path: "/panel-llamados" },
-      { icon: <PageIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
+      { icon: <EyeIcon className="fill-current" />, name: "Vista médico", path: "/vista-medico" },
+      { icon: <AudioIcon />, name: "Panel de llamados", path: "/panel-llamados" },
+      { icon: <VideoIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
     ],
   },
   {
@@ -158,8 +160,8 @@ const recepcionMenuSections: NavSection[] = [
   {
     title: "Consulta",
     items: [
-      { icon: <BoxCubeIcon />, name: "Sucursales", path: "/sucursales" },
-      { icon: <TableIcon />, name: "Consultorios", path: "/consultorios" },
+      { icon: <BuildingIcon />, name: "Sucursales", path: "/sucursales" },
+      { icon: <DoorIcon />, name: "Consultorios", path: "/consultorios" },
       { icon: <UserCircleIcon />, name: "Médicos", path: "/medicos" },
     ],
   },
@@ -167,11 +169,11 @@ const recepcionMenuSections: NavSection[] = [
     title: "Turnos",
     items: [
       { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
-      { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
+      { icon: <GroupIcon />, name: "Pacientes", path: "/basic-tables" },
       { icon: <ListIcon />, name: "Nuevo turno", path: "/form-elements" },
-      { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
-      { icon: <PageIcon />, name: "Panel de llamados", path: "/panel-llamados" },
-      { icon: <PageIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
+      { icon: <EyeIcon className="fill-current" />, name: "Vista médico", path: "/vista-medico" },
+      { icon: <AudioIcon />, name: "Panel de llamados", path: "/panel-llamados" },
+      { icon: <VideoIcon />, name: "Pantalla TV (sala)", path: "/pantalla-espera" },
     ],
   },
   {
@@ -192,9 +194,9 @@ const medicoMenuSections: NavSection[] = [
   {
     title: "Atención",
     items: [
-      { icon: <PageIcon />, name: "Vista médico", path: "/vista-medico" },
+      { icon: <EyeIcon className="fill-current" />, name: "Vista médico", path: "/vista-medico" },
       { icon: <CalenderIcon />, name: "Agenda", path: "/calendar" },
-      { icon: <TableIcon />, name: "Pacientes", path: "/basic-tables" },
+      { icon: <GroupIcon />, name: "Pacientes", path: "/basic-tables" },
     ],
   },
   {

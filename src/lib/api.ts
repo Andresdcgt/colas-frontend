@@ -423,6 +423,9 @@ export interface Turno {
   reencolado?: boolean;
   motivo_cancelacion?: string | null;
   cancelado_at?: string | null;
+  orden_pausa?: number | null;
+  pausado_at?: string | null;
+  motivo_pausa?: string | null;
   paciente_nombre?: string;
   paciente_apellido?: string;
   paciente_dni?: string;
@@ -488,6 +491,38 @@ export async function recuperarTurno(id: string): Promise<Turno> {
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data?.message || "Error al recuperar turno");
+  }
+  return res.json();
+}
+
+export async function pausarTurno(id: string, motivo?: string): Promise<Turno> {
+  const res = await fetchWithAuth(`/api/turnos/${id}/pausar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ motivo: motivo?.trim() || undefined }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || "Error al pausar turno");
+  }
+  return res.json();
+}
+
+export type ReanudarAccion = "siguiente" | "esperar";
+
+export async function reanudarTurno(
+  id: string,
+  accion: ReanudarAccion,
+  motivo?: string
+): Promise<Turno> {
+  const res = await fetchWithAuth(`/api/turnos/${id}/reanudar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accion, motivo: motivo?.trim() || undefined }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || "Error al reanudar turno");
   }
   return res.json();
 }
